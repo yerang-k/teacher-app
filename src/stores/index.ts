@@ -6,3 +6,4 @@ export { useBehaviorStore } from './behaviorStore';
 export { useTaskStore } from './taskStore';
 export { useReportStore } from './reportStore';
 export { useSettingsStore } from './settingsStore';
+export { useTimetableStore } from './timetableStore';
