@@ -243,7 +243,7 @@ export default function BehaviorNotesPage() {
                 <SelectValue placeholder="학생 선택 (전체 보기는 비움)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">— 학급 전체 보기 —</SelectItem>
+                <SelectItem value="all">— 학급 전체 보기 —</SelectItem>
                 {students.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
                     {s.number}. {s.name}
