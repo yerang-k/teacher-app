@@ -237,7 +237,7 @@ export default function TasksPage() {
                 <SelectValue placeholder="전체" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">전체</SelectItem>
+                <SelectItem value="all">전체</SelectItem>
                 {CATEGORIES.map((c) => (
                   <SelectItem key={c} value={c}>
                     {c}
