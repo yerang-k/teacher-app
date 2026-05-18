@@ -23,8 +23,7 @@ import {
 } from "@/stores";
 import { todayKey } from "@/lib/dateUtils";
 import { db } from "@/db";
-import type { AttendanceRecord, BehaviorNote, Lesson } from "@/types";
-
+import type { AttendanceRecord, BehaviorNote, Lesson, TimetableSlot } from "@/types";
 export default function Home() {
   const settings = useSettingsStore((s) => s.settings);
   const classes = useClassStore((s) => s.classes);
@@ -473,7 +472,7 @@ function WeekTimetable({
   slots,
   classes,
 }: {
-  slots: import("@/types").TimetableSlot[];
+  slots: TimetableSlot[];
   classes: ReturnType<typeof useClassStore.getState>["classes"];
 }) {
   return (
