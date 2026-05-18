@@ -51,7 +51,7 @@ export default function LessonsPage() {
   const removeLesson = useLessonStore((s) => s.removeLesson);
   const bulkAddWeekly = useLessonStore((s) => s.bulkAddWeekly);
 
-  const [classId, setClassId] = useState<string>("");
+  const [classId, setClassId] = useState<string>("all");
   const [weekStart, setWeekStart] = useState<string>(
     () => weekdaysOfThisWeek()[0]
   );
@@ -72,14 +72,14 @@ export default function LessonsPage() {
   useEffect(() => {
     const from = weekDays[0];
     const to = weekDays[weekDays.length - 1];
-    loadByDateRange(from, to, classId || undefined);
+    loadByDateRange(from, to, classId === "all" ? undefined : classId);
   }, [weekDays, classId, loadByDateRange]);
 
   const lessonsByDay = useMemo(() => {
     const map = new Map<string, Lesson[]>();
     for (const d of weekDays) map.set(d, []);
     for (const l of lessons) {
-      if (classId && l.classId !== classId) continue;
+      if (classId !== "all" && l.classId !== classId) continue;
       const arr = map.get(l.date);
       if (arr) arr.push(l);
     }
@@ -198,7 +198,7 @@ export default function LessonsPage() {
                 <SelectValue placeholder="전체 학급" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">전체 학급</SelectItem>
+                <SelectItem value="all">전체 학급</SelectItem>
                 {classes.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.grade}-{c.classNumber}{" "}
