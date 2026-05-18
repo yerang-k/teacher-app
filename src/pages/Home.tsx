@@ -133,6 +133,20 @@ export default function Home() {
           </Link>
         </div>
       </div>
+      {/* 빠른 메뉴 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">빠른 메뉴</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 md:grid-cols-6 gap-2">
+          <QuickLink href="/lessons" label="수업·진도" />
+          <QuickLink href="/attendance" label="출결" />
+          <QuickLink href="/behavior" label="행동특성" />
+          <QuickLink href="/tasks" label="업무" />
+          <QuickLink href="/ai-report" label="AI 보고서" />
+          <QuickLink href="/settings" label="설정" />
+        </CardContent>
+      </Card>
 
       {/* 알림 카드 */}
       {(attendancePending || overdue.length > 0) && (
@@ -402,21 +416,6 @@ export default function Home() {
           </CardContent>
         </Card>
       </div>
-
-      {/* 빠른 메뉴 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">빠른 메뉴</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-6 gap-2">
-          <QuickLink href="/lessons" label="수업·진도" />
-          <QuickLink href="/attendance" label="출결" />
-          <QuickLink href="/behavior" label="행동특성" />
-          <QuickLink href="/tasks" label="업무" />
-          <QuickLink href="/ai-report" label="AI 보고서" />
-          <QuickLink href="/settings" label="설정" />
-        </CardContent>
-      </Card>
     </div>
   );
 }
