@@ -156,7 +156,19 @@ export interface AIReport {
   createdAt: number;
   updatedAt: number;
 }
-
+// ============ 시간표 ============
+/** 학기별 주간 시간표의 한 칸 (요일 × 교시 → 학급) */
+export interface TimetableSlot {
+  id: string;
+  year: number;
+  semester: Semester;
+  dayOfWeek: 1 | 2 | 3 | 4 | 5;
+  period: number;
+  classId: string;
+  room?: string;
+  createdAt: number;
+  updatedAt: number;
+}
 // ============ 설정 ============
 export interface AppSettings {
   id: 'singleton';
