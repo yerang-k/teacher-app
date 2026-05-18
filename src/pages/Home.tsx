@@ -19,6 +19,7 @@ import {
   useBehaviorStore,
   useReportStore,
   useSettingsStore,
+  useTimetableStore,
 } from "@/stores";
 import { todayKey } from "@/lib/dateUtils";
 import { db } from "@/db";
@@ -38,6 +39,8 @@ export default function Home() {
   const loadReports = useReportStore((s) => s.loadAll);
 
   const today = todayKey();
+  const slots = useTimetableStore((s) => s.slots);
+  const loadByTerm = useTimetableStore((s) => s.loadByTerm);
 
   // 오늘 수업 / 오늘 출결 / 최근 행동기록은 DB에서 직접 가져옴
   const [todayLessons, setTodayLessons] = useState<Lesson[]>([]);
@@ -47,7 +50,8 @@ export default function Home() {
   useEffect(() => {
     loadTasks();
     loadReports();
-  }, [loadTasks, loadReports]);
+    loadByTerm(settings.currentYear, settings.currentSemester);
+  }, [loadTasks, loadReports, loadByTerm, settings.currentYear, settings.currentSemester]);
 
   useEffect(() => {
     (async () => {
@@ -192,6 +196,20 @@ export default function Home() {
       )}
 
       {/* 통계 카드 4종 */}
+      {/* 이번 주 시간표 */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">이번 주 시간표</CardTitle>
+            <Link href="/timetable">
+              <Button variant="ghost" size="sm">전체 보기 →</Button>
+            </Link>
+          </div>
+        </CardHeader>
+        <CardContent className="p-3 overflow-x-auto">
+          <WeekTimetable slots={slots} classes={classes} />
+        </CardContent>
+      </Card>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard
           label="담당 학급"
@@ -443,6 +461,66 @@ function StatCard({
 }
 
 function QuickLink({ href, label }: { href: string; label: string }) {
+  const WEEK_DAYS = [
+  { value: 1 as const, label: "월" },
+  { value: 2 as const, label: "화" },
+  { value: 3 as const, label: "수" },
+  { value: 4 as const, label: "목" },
+  { value: 5 as const, label: "금" },
+];
+const WEEK_PERIODS = [1, 2, 3, 4, 5, 6, 7];
+function WeekTimetable({
+  slots,
+  classes,
+}: {
+  slots: import("@/types").TimetableSlot[];
+  classes: ReturnType<typeof useClassStore.getState>["classes"];
+}) {
+  return (
+    <div className="grid grid-cols-[36px_repeat(5,1fr)] gap-1 min-w-[360px] text-xs">
+      <div />
+      {WEEK_DAYS.map((d) => (
+        <div key={d.value} className="text-center font-semibold py-1 bg-muted/40 rounded">
+          {d.label}
+        </div>
+      ))}
+      {WEEK_PERIODS.map((period) => (
+        <div key={period} className="contents">
+          <div className="text-center text-muted-foreground py-1.5 bg-muted/40 rounded font-medium">
+            {period}
+          </div>
+          {WEEK_DAYS.map((d) => {
+            const slot = slots.find(
+              (s) => s.dayOfWeek === d.value && s.period === period
+            );
+            const klass = slot ? classes.find((c) => c.id === slot.classId) : null;
+            return (
+              <div
+                key={d.value}
+                className={`border rounded p-1 min-h-[44px] flex flex-col items-center justify-center text-center ${
+                  klass ? "bg-card" : "bg-muted/20"
+                }`}
+              >
+                {klass ? (
+                  <>
+                    <div className="font-semibold">
+                      {klass.grade}-{klass.classNumber}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {klass.homeroom ? "담임" : klass.subject}
+                    </div>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
   return (
     <Link href={href}>
       <Button variant="outline" className="w-full">
