@@ -13,7 +13,7 @@ import AttendancePage from "./pages/AttendancePage";
 import BehaviorNotesPage from "./pages/BehaviorNotesPage";
 import ClassManagementPage from "./pages/ClassManagementPage";
 import AIReportPage from "./pages/AIReportPage";
-
+import TimetablePage from "./pages/TimetablePage";
 import {
   useClassStore,
   useTaskStore,
@@ -30,6 +30,7 @@ function Router() {
       <Route path="/attendance" component={AttendancePage} />
       <Route path="/behavior" component={BehaviorNotesPage} />
       <Route path="/ai-report" component={AIReportPage} />
+      <Route path="/timetable" component={TimetablePage} />
       <Route path="/settings" component={ClassManagementPage} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
