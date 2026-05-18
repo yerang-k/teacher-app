@@ -8,6 +8,7 @@ import type {
   SchoolTask,
   AIReport,
   AppSettings,
+  TimetableSlot,
 } from '@/types';
 
 /**
@@ -25,7 +26,7 @@ export class TeacherDB extends Dexie {
   tasks!: Table<SchoolTask, string>;
   reports!: Table<AIReport, string>;
   settings!: Table<AppSettings, string>;
-
+  timetable!: Table<TimetableSlot, string>;
   constructor() {
     super('TeacherAppDB');
 
@@ -45,6 +46,11 @@ export class TeacherDB extends Dexie {
       reports: 'id, type, createdAt, *targetIds',
       settings: 'id',
     });
+    // v2: 시간표 테이블 추가
+    this.version(2).stores({
+      timetable:
+        'id, [year+semester], [year+semester+dayOfWeek+period], classId',
+    });
   }
 
   /**
@@ -62,6 +68,7 @@ export class TeacherDB extends Dexie {
         this.tasks,
         this.reports,
         this.settings,
+        this.timetable,
       ],
       async () => {
         await Promise.all([
@@ -73,6 +80,7 @@ export class TeacherDB extends Dexie {
           this.tasks.clear(),
           this.reports.clear(),
           this.settings.clear(),
+          this.timetable.clear(),
         ]);
       }
     );
