@@ -364,7 +364,7 @@ function SidePanel({
   year: number;
   semester: Semester;
   classes: ReturnType<typeof useClassStore.getState>["classes"];
-  getStudentsByClass: (id: string) => ReturnType
+  getStudentsByClass: (id: string) => ReturnType<
     typeof useClassStore.getState
   >["students"];
   onClose: () => void;
