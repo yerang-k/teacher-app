@@ -4,6 +4,7 @@ import { useTaskStore } from "@/stores";
 const MENU = [
   { href: "/", label: "홈", icon: "🏠" },
   { href: "/lessons", label: "수업·진도", icon: "📚" },
+  { href: "/timetable", label: "시간표", icon: "🗓️" },
   { href: "/attendance", label: "출결", icon: "✓" },
   { href: "/behavior", label: "행동특성", icon: "📝" },
   { href: "/tasks", label: "업무", icon: "📋" },
