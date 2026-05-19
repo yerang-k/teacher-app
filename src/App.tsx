@@ -14,6 +14,7 @@ import BehaviorNotesPage from "./pages/BehaviorNotesPage";
 import ClassManagementPage from "./pages/ClassManagementPage";
 import AIReportPage from "./pages/AIReportPage";
 import TimetablePage from "./pages/TimetablePage";
+import AssessmentPage from "./pages/AssessmentPage";
 import {
   useClassStore,
   useTaskStore,
@@ -31,6 +32,7 @@ function Router() {
       <Route path="/behavior" component={BehaviorNotesPage} />
       <Route path="/ai-report" component={AIReportPage} />
       <Route path="/timetable" component={TimetablePage} />
+      <Route path="/assessment" component={AssessmentPage} />
       <Route path="/settings" component={ClassManagementPage} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
