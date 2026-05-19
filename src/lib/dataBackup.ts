@@ -74,44 +74,31 @@ export async function importData(file: File): Promise<void> {
 
   const { data } = parsed;
 
+  // 백업 파일에 포함된 테이블만 복원 (없는 테이블은 기존 데이터 유지)
+  const tableMap = [
+    { key: "classes", table: db.classes },
+    { key: "students", table: db.students },
+    { key: "lessons", table: db.lessons },
+    { key: "attendance", table: db.attendance },
+    { key: "behaviorNotes", table: db.behaviorNotes },
+    { key: "tasks", table: db.tasks },
+    { key: "settings", table: db.settings },
+    { key: "timetable", table: db.timetable },
+    { key: "assessments", table: db.assessments },
+    { key: "assessmentRecords", table: db.assessmentRecords },
+  ] as const;
+
+  const includedTables = tableMap.filter(({ key }) => key in data);
+
   await db.transaction(
     "rw",
-    [
-      db.classes,
-      db.students,
-      db.lessons,
-      db.attendance,
-      db.behaviorNotes,
-      db.tasks,
-      db.settings,
-      db.timetable,
-      db.assessments,
-      db.assessmentRecords,
-    ],
+    includedTables.map(({ table }) => table),
     async () => {
-      await Promise.all([
-        db.classes.clear(),
-        db.students.clear(),
-        db.lessons.clear(),
-        db.attendance.clear(),
-        db.behaviorNotes.clear(),
-        db.tasks.clear(),
-        db.settings.clear(),
-        db.timetable.clear(),
-        db.assessments.clear(),
-        db.assessmentRecords.clear(),
-      ]);
-
-      if (data.classes?.length) await db.classes.bulkAdd(data.classes as never[]);
-      if (data.students?.length) await db.students.bulkAdd(data.students as never[]);
-      if (data.lessons?.length) await db.lessons.bulkAdd(data.lessons as never[]);
-      if (data.attendance?.length) await db.attendance.bulkAdd(data.attendance as never[]);
-      if (data.behaviorNotes?.length) await db.behaviorNotes.bulkAdd(data.behaviorNotes as never[]);
-      if (data.tasks?.length) await db.tasks.bulkAdd(data.tasks as never[]);
-      if (data.settings?.length) await db.settings.bulkAdd(data.settings as never[]);
-      if (data.timetable?.length) await db.timetable.bulkAdd(data.timetable as never[]);
-      if (data.assessments?.length) await db.assessments.bulkAdd(data.assessments as never[]);
-      if (data.assessmentRecords?.length) await db.assessmentRecords.bulkAdd(data.assessmentRecords as never[]);
+      for (const { key, table } of includedTables) {
+        await table.clear();
+        const rows = data[key as keyof typeof data];
+        if (rows?.length) await table.bulkAdd(rows as never[]);
+      }
     }
   );
 }
