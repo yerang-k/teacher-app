@@ -7,3 +7,4 @@ export { useTaskStore } from './taskStore';
 export { useReportStore } from './reportStore';
 export { useSettingsStore } from './settingsStore';
 export { useTimetableStore } from './timetableStore';
+export { useAssessmentStore } from './assessmentStore';
