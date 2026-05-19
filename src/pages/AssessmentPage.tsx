@@ -326,6 +326,35 @@ function ScoreTable({
   records: AssessmentRecord[];
 }) {
   const upsertRecord = useAssessmentStore((s) => s.upsertRecord);
+  const [sortField, setSortField] = useState<"number" | "score">("number");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (field: "number" | "score") => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
+
+  const sortedStudents = [...students].sort((a, b) => {
+    let cmp = 0;
+    if (sortField === "number") {
+      cmp = a.number - b.number;
+    } else {
+      const aVal =
+        assessment.scoreType === "score"
+          ? Number(drafts[a.id]?.score ?? -1)
+          : (drafts[a.id]?.grade ?? "").charCodeAt(0) || -1;
+      const bVal =
+        assessment.scoreType === "score"
+          ? Number(drafts[b.id]?.score ?? -1)
+          : (drafts[b.id]?.grade ?? "").charCodeAt(0) || -1;
+      cmp = aVal - bVal;
+    }
+    return sortDir === "asc" ? cmp : -cmp;
+  });
 
   // 로컬 편집 상태
   const [drafts, setDrafts] = useState<
@@ -424,8 +453,11 @@ function ScoreTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
-              <th className="text-left px-3 py-2 font-medium text-xs w-8">
-                번호
+              <th
+                className="text-left px-3 py-2 font-medium text-xs w-8 cursor-pointer hover:bg-muted/50 select-none"
+                onClick={() => toggleSort("number")}
+              >
+                번호 {sortField === "number" ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
               </th>
               <th className="text-left px-3 py-2 font-medium text-xs w-20">
                 이름
@@ -438,14 +470,18 @@ function ScoreTable({
                   {s}차시
                 </th>
               ))}
-              <th className="text-center px-2 py-2 font-medium text-xs">
-                {assessment.scoreType === "score" ? "점수" : "등급"}
+              <th
+                className="text-center px-2 py-2 font-medium text-xs cursor-pointer hover:bg-muted/50 select-none"
+                onClick={() => toggleSort("score")}
+              >
+                {assessment.scoreType === "score" ? "점수" : "등급"}{" "}
+                {sortField === "score" ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
               </th>
               <th className="text-left px-2 py-2 font-medium text-xs">비고</th>
             </tr>
           </thead>
           <tbody>
-            {students.map((student) => {
+            {sortedStudents.map((student) => {
               const draft = drafts[student.id] ?? {
                 score: "",
                 grade: "",
