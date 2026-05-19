@@ -459,8 +459,6 @@ function StatCard({
   );
 }
 
-function QuickLink({ href, label }: { href: string; label: string }) {
-  const WEEK_DAYS = [
   { value: 1 as const, label: "월" },
   { value: 2 as const, label: "화" },
   { value: 3 as const, label: "수" },
@@ -520,6 +518,7 @@ function WeekTimetable({
     </div>
   );
 }
+function QuickLink({ href, label }: { href: string; label: string }) {
   return (
     <Link href={href}>
       <Button variant="outline" className="w-full">
