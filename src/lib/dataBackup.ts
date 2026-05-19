@@ -75,18 +75,18 @@ export async function importData(file: File): Promise<void> {
   const { data } = parsed;
 
   // 백업 파일에 포함된 테이블만 복원 (없는 테이블은 기존 데이터 유지)
-  const tableMap = [
-    { key: "classes", table: db.classes },
-    { key: "students", table: db.students },
-    { key: "lessons", table: db.lessons },
-    { key: "attendance", table: db.attendance },
-    { key: "behaviorNotes", table: db.behaviorNotes },
-    { key: "tasks", table: db.tasks },
-    { key: "settings", table: db.settings },
-    { key: "timetable", table: db.timetable },
-    { key: "assessments", table: db.assessments },
-    { key: "assessmentRecords", table: db.assessmentRecords },
-  ] as const;
+  const tableMap: Array<{ key: string; table: ReturnType<typeof db.table> }> = [
+    { key: "classes", table: db.classes as ReturnType<typeof db.table> },
+    { key: "students", table: db.students as ReturnType<typeof db.table> },
+    { key: "lessons", table: db.lessons as ReturnType<typeof db.table> },
+    { key: "attendance", table: db.attendance as ReturnType<typeof db.table> },
+    { key: "behaviorNotes", table: db.behaviorNotes as ReturnType<typeof db.table> },
+    { key: "tasks", table: db.tasks as ReturnType<typeof db.table> },
+    { key: "settings", table: db.settings as ReturnType<typeof db.table> },
+    { key: "timetable", table: db.timetable as ReturnType<typeof db.table> },
+    { key: "assessments", table: db.assessments as ReturnType<typeof db.table> },
+    { key: "assessmentRecords", table: db.assessmentRecords as ReturnType<typeof db.table> },
+  ];
 
   const includedTables = tableMap.filter(({ key }) => key in data);
 
@@ -97,7 +97,8 @@ export async function importData(file: File): Promise<void> {
       for (const { key, table } of includedTables) {
         await table.clear();
         const rows = data[key as keyof typeof data];
-        if (rows?.length) await table.bulkAdd(rows as never[]);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (rows?.length) await (table as any).bulkAdd(rows);
       }
     }
   );
