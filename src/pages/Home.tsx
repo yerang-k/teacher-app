@@ -496,6 +496,7 @@ function WeekTimetable({
     date: string;
   } | null>(null);
   return (
+    <>
     <div className="grid grid-cols-[36px_repeat(5,1fr)] gap-1 min-w-[360px] text-xs">
       <div />
       {WEEK_DAYS.map((d) => (
