@@ -29,6 +29,8 @@ export class TeacherDB extends Dexie {
   reports!: Table<AIReport, string>;
   settings!: Table<AppSettings, string>;
   timetable!: Table<TimetableSlot, string>;
+  assessments!: Table<Assessment, string>;
+  assessmentRecords!: Table<AssessmentRecord, string>;
   constructor() {
     super('TeacherAppDB');
 
@@ -53,6 +55,11 @@ export class TeacherDB extends Dexie {
       timetable:
         'id, [year+semester], [year+semester+dayOfWeek+period], classId',
     });
+    // v3: 수행평가 테이블 추가
+    this.version(3).stores({
+      assessments: 'id, subject, [year+semester]',
+      assessmentRecords: 'id, assessmentId, studentId, classId',
+    });
   }
 
   /**
@@ -71,6 +78,8 @@ export class TeacherDB extends Dexie {
         this.reports,
         this.settings,
         this.timetable,
+        this.assessments,
+        this.assessmentRecords,
       ],
       async () => {
         await Promise.all([
@@ -83,6 +92,8 @@ export class TeacherDB extends Dexie {
           this.reports.clear(),
           this.settings.clear(),
           this.timetable.clear(),
+          this.assessments.clear(),
+          this.assessmentRecords.clear(),
         ]);
       }
     );
