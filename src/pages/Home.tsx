@@ -10,6 +10,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import {
   useClassStore,
@@ -458,6 +465,14 @@ function StatCard({
     </Card>
   );
 }
+function dateOfWeek(dayOfWeek: 1 | 2 | 3 | 4 | 5): string {
+  const today = new Date();
+  const todayDay = today.getDay() === 0 ? 7 : today.getDay();
+  const diff = dayOfWeek - todayDay;
+  const target = new Date(today);
+  target.setDate(today.getDate() + diff);
+  return target.toISOString().slice(0, 10);
+}
 const WEEK_DAYS = [
   { value: 1 as const, label: "월" },
   { value: 2 as const, label: "화" },
@@ -473,6 +488,13 @@ function WeekTimetable({
   slots: TimetableSlot[];
   classes: ReturnType<typeof useClassStore.getState>["classes"];
 }) {
+  const [popup, setPopup] = useState<{
+    day: 1 | 2 | 3 | 4 | 5;
+    period: number;
+    klass: ReturnType<typeof useClassStore.getState>["classes"][0];
+    room?: string;
+    date: string;
+  } | null>(null);
   return (
     <div className="grid grid-cols-[36px_repeat(5,1fr)] gap-1 min-w-[360px] text-xs">
       <div />
@@ -492,10 +514,15 @@ function WeekTimetable({
             );
             const klass = slot ? classes.find((c) => c.id === slot.classId) : null;
             return (
-              <div
+              <button
                 key={d.value}
-                className={`border rounded p-1 min-h-[44px] flex flex-col items-center justify-center text-center ${
-                  klass ? "bg-card" : "bg-muted/20"
+                type="button"
+                disabled={!klass}
+                onClick={() => {
+                  if (klass) setPopup({ day: d.value, period, klass, room: slot?.room, date: dateOfWeek(d.value) });
+                }}
+                className={`border rounded p-1 min-h-[44px] flex flex-col items-center justify-center text-center transition-colors ${
+                  klass ? "bg-card hover:bg-accent/40 cursor-pointer" : "bg-muted/20 cursor-default"
                 }`}
               >
                 {klass ? (
@@ -510,12 +537,39 @@ function WeekTimetable({
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>
       ))}
     </div>
+      {popup && (
+        <Dialog open={!!popup} onOpenChange={() => setPopup(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>
+                {WEEK_DAYS.find((d) => d.value === popup.day)?.label} {popup.period}교시 · {popup.klass.grade}-{popup.klass.classNumber}반
+              </DialogTitle>
+              <DialogDescription>
+                {popup.date} · {popup.klass.homeroom ? "담임 학급" : popup.klass.subject}
+                {popup.room ? ` · ${popup.room}` : ""}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-2 pt-2">
+              <Link href="/timetable" onClick={() => setPopup(null)}>
+                <Button className="w-full">출결·수업 바로 입력</Button>
+              </Link>
+              <Link href="/lessons" onClick={() => setPopup(null)}>
+                <Button variant="outline" className="w-full">수업 진도 보기</Button>
+              </Link>
+              <Link href="/attendance" onClick={() => setPopup(null)}>
+                <Button variant="outline" className="w-full">출결 현황 보기</Button>
+              </Link>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }
 function QuickLink({ href, label }: { href: string; label: string }) {
