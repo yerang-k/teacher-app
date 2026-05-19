@@ -35,7 +35,7 @@ import {
   useAttendanceStore,
   useSettingsStore,
 } from "@/stores";
-import { todayKey } from "@/lib/dateUtils";
+import { todayKey, toDateKey } from "@/lib/dateUtils";
 import type {
   Semester,
   AttendanceStatus,
@@ -74,7 +74,9 @@ function dateOfThisWeek(dayOfWeek: 1 | 2 | 3 | 4 | 5): string {
   const diff = dayOfWeek - todayDay;
   const target = new Date(today);
   target.setDate(today.getDate() + diff);
-  return target.toISOString().slice(0, 10);
+  // toISOString()은 UTC 기준이라 한국(UTC+9) 자정~오전9시 사이에 날짜가 하루 밀림
+  // toDateKey()는 로컬 날짜를 그대로 사용하므로 안전
+  return toDateKey(target);
 }
 
 export default function TimetablePage() {
