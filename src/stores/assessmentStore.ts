@@ -23,10 +23,8 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   records: [],
 
   loadAll: async () => {
-    const assessments = await db.assessments
-      .orderBy("createdAt")
-      .reverse()
-      .toArray();
+    const assessments = await db.assessments.toArray();
+    assessments.sort((a, b) => b.createdAt - a.createdAt);
     set({ assessments });
   },
 
