@@ -9,6 +9,8 @@ import type {
   AIReport,
   AppSettings,
   TimetableSlot,
+  Assessment,
+  AssessmentRecord,
 } from '@/types';
 
 /**
