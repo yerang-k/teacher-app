@@ -170,6 +170,44 @@ export interface TimetableSlot {
   updatedAt: number;
 }
 // ============ 설정 ============
+// ============ 수행평가 ============
+export type ScoreType = "score" | "grade";
+
+export interface AssessmentSession {
+  sessionNumber: number;
+  date?: string;
+  description?: string;
+}
+
+export interface Assessment {
+  id: string;
+  title: string;
+  subject: string;
+  year: number;
+  semester: Semester;
+  classIds: string[];
+  scoreType: ScoreType;
+  maxScore?: number;
+  grades?: string[];
+  totalSessions: number;
+  sessions: AssessmentSession[];
+  description?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AssessmentRecord {
+  id: string;
+  assessmentId: string;
+  studentId: string;
+  classId: string;
+  score?: number;
+  grade?: string;
+  sessionAttendance: Record<number, "응시" | "미응시">;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
 export interface AppSettings {
   id: 'singleton';
   currentYear: number;
