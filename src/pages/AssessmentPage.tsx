@@ -326,6 +326,11 @@ function ScoreTable({
   records: AssessmentRecord[];
 }) {
   const upsertRecord = useAssessmentStore((s) => s.upsertRecord);
+  const classes = useClassStore((s) => s.classes);
+  const currentClass = classes.find((c) => c.id === classId);
+  const classLabel = currentClass
+    ? `${currentClass.grade}-${currentClass.classNumber}반`
+    : classId;
   const [sortField, setSortField] = useState<"number" | "score">("number");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -426,7 +431,47 @@ function ScoreTable({
     }
     toast.success("저장했습니다.");
   };
-
+const exportToCSV = () => {
+    const sessionHeaders = sessions.map((s) => {
+      const session = assessment.sessions.find((ss) => ss.sessionNumber === s);
+      return session?.date ? `${s}차시(${session.date})` : `${s}차시`;
+    });
+    const scoreHeader =
+      assessment.scoreType === "score"
+        ? `점수(/${assessment.maxScore ?? "?"})`
+        : "등급";
+    const headers = ["번호", "이름", ...sessionHeaders, scoreHeader, "비고"];
+    const rows = sortedStudents.map((student) => {
+      const draft = drafts[student.id] ?? {
+        score: "",
+        grade: "",
+        sessionAttendance: {},
+        notes: "",
+      };
+      const sessionCols = sessions.map(
+        (s) => draft.sessionAttendance[s] ?? "응시"
+      );
+      const score =
+        assessment.scoreType === "score"
+          ? draft.score ?? ""
+          : draft.grade ?? "";
+      return [student.number, student.name, ...sessionCols, score, draft.notes ?? ""];
+    });
+    const csv = [headers, ...rows]
+      .map((row) =>
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
+      )
+      .join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${assessment.title}_${classLabel}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
   const sessions = Array.from(
     { length: assessment.totalSessions },
     (_, i) => i + 1
@@ -440,9 +485,14 @@ function ScoreTable({
           <CardTitle className="text-sm">
             학생 점수 입력 ({students.length}명)
           </CardTitle>
-          <Button size="sm" onClick={saveAll}>
-            저장
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={exportToCSV}>
+              CSV 내보내기
+            </Button>
+            <Button size="sm" onClick={saveAll}>
+              저장
+            </Button>
+          </div>
         </div>
         <CardDescription className="text-xs">
           차시 버튼을 클릭해 응시/미응시를 전환하세요. 미응시 학생도 점수는
