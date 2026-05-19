@@ -10,6 +10,7 @@ const MENU = [
   { href: "/behavior", label: "행동특성", icon: "📝" },
   { href: "/tasks", label: "업무", icon: "📋" },
   { href: "/ai-report", label: "AI 보고서", icon: "🤖" },
+  { href: "/backup", label: "백업/복원", icon: "💾" },
   { href: "/settings", label: "설정", icon: "⚙️" },
 ];
 
