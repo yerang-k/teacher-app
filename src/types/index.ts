@@ -191,6 +191,7 @@ export interface Assessment {
   grades?: string[];
   totalSessions: number;
   sessions: AssessmentSession[];
+  classSessionDateOverrides?: { classId: string; dates: Record<number, string> }[];
   description?: string;
   createdAt: number;
   updatedAt: number;
