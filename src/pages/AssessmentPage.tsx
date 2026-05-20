@@ -264,13 +264,19 @@ function AssessmentDetail({
         {/* 차시 정보 */}
         <CardContent className="pt-0">
           <div className="flex flex-wrap gap-2">
-            {assessment.sessions.map((s) => (
-              <Badge key={s.sessionNumber} variant="outline">
-                {s.sessionNumber}차시
-                {s.date ? ` · ${s.date}` : ""}
-                {s.description ? ` · ${s.description}` : ""}
-              </Badge>
-            ))}
+            {assessment.sessions.map((s) => {
+              const classOverride = assessment.classSessionDateOverrides?.find(
+                (ov) => ov.classId === selectedClassId
+              );
+              const date = classOverride?.dates[s.sessionNumber] ?? s.date;
+              return (
+                <Badge key={s.sessionNumber} variant="outline">
+                  {s.sessionNumber}차시
+                  {date ? ` · ${date}` : ""}
+                  {s.description ? ` · ${s.description}` : ""}
+                </Badge>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
@@ -432,9 +438,14 @@ function ScoreTable({
     toast.success("저장했습니다.");
   };
 const exportToCSV = () => {
+    const classDateOverride = assessment.classSessionDateOverrides?.find(
+      (ov) => ov.classId === classId
+    );
     const sessionHeaders = sessions.map((s) => {
-      const session = assessment.sessions.find((ss) => ss.sessionNumber === s);
-      return session?.date ? `${s}차시(${session.date})` : `${s}차시`;
+      const date =
+        classDateOverride?.dates[s] ??
+        assessment.sessions.find((ss) => ss.sessionNumber === s)?.date;
+      return date ? `${s}차시(${date})` : `${s}차시`;
     });
     const scoreHeader =
       assessment.scoreType === "score"
@@ -693,7 +704,10 @@ function AssessmentFormDialog({
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>(
     initial?.classIds ?? []
   );
-
+  const [classDateOverrides, setClassDateOverrides] = useState
+    Record<string, Record<number, string>>
+  >({});
+  const [showClassOverrides, setShowClassOverrides] = useState(false);
   // totalSessions 변경 시 sessions 배열 동기화
   useEffect(() => {
     setSessions((prev) =>
@@ -730,6 +744,13 @@ function AssessmentFormDialog({
         }))
     );
     setSelectedClassIds(initial?.classIds ?? []);
+    setClassDateOverrides(
+      initial?.classSessionDateOverrides?.reduce(
+        (acc, ov) => ({ ...acc, [ov.classId]: ov.dates }),
+        {} as Record<string, Record<number, string>>
+      ) ?? {}
+    );
+    setShowClassOverrides(false);
   }, [open, initial]);
 
   const toggleClass = (id: string) => {
@@ -774,8 +795,14 @@ function AssessmentFormDialog({
         description: s.description || undefined,
       })),
       classIds: selectedClassIds,
+      classSessionDateOverrides:
+        Object.keys(classDateOverrides).length > 0
+          ? Object.entries(classDateOverrides).map(([classId, dates]) => ({
+              classId,
+              dates,
+            }))
+          : undefined,
     };
-
     if (initial) {
       await updateAssessment(initial.id, data);
       toast.success("수정했습니다.");
@@ -954,6 +981,61 @@ function AssessmentFormDialog({
             </div>
           </div>
 
+          {selectedClassIds.length > 0 && (
+            <>
+              <Separator />
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>학급별 날짜 개별 설정 (선택)</Label>
+                  <button
+                    type="button"
+                    onClick={() => setShowClassOverrides((v) => !v)}
+                    className="text-xs text-muted-foreground underline"
+                  >
+                    {showClassOverrides ? "접기 ▲" : "펼치기 ▼"}
+                  </button>
+                </div>
+                {showClassOverrides && (
+                  <div className="space-y-3">
+                    {selectedClassIds.map((classId) => {
+                      const c = classes.find((x) => x.id === classId);
+                      if (!c) return null;
+                      return (
+                        <div key={classId} className="border rounded p-2 space-y-1.5">
+                          <div className="text-xs font-semibold">
+                            {c.grade}-{c.classNumber}반
+                          </div>
+                          {sessions.map((s) => (
+                            <div key={s.sessionNumber} className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground w-12 shrink-0">
+                                {s.sessionNumber}차시
+                              </span>
+                              <Input
+                                type="date"
+                                value={
+                                  classDateOverrides[classId]?.[s.sessionNumber] ?? s.date
+                                }
+                                onChange={(e) =>
+                                  setClassDateOverrides((prev) => ({
+                                    ...prev,
+                                    [classId]: {
+                                      ...prev[classId],
+                                      [s.sessionNumber]: e.target.value,
+                                    },
+                                  }))
+                                }
+                                className="h-8 text-xs w-40"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               취소
