@@ -523,14 +523,27 @@ const exportToCSV = () => {
               <th className="text-left px-3 py-2 font-medium text-xs w-20">
                 이름
               </th>
-              {sessions.map((s) => (
-                <th
-                  key={s}
-                  className="text-center px-2 py-2 font-medium text-xs"
-                >
-                  {s}차시
-                </th>
-              ))}
+              {sessions.map((s) => {
+                  const classOverride = assessment.classSessionDateOverrides?.find(
+                    (ov) => ov.classId === classId
+                  );
+                  const date =
+                    classOverride?.dates[s] ??
+                    assessment.sessions.find((ss) => ss.sessionNumber === s)?.date;
+                  return (
+                    <th
+                      key={s}
+                      className="text-center px-2 py-2 font-medium text-xs"
+                    >
+                      <div>{s}차시</div>
+                      {date && (
+                        <div className="font-normal text-muted-foreground mt-0.5">
+                          {date.slice(5).replace("-", "/")}
+                        </div>
+                      )}
+                    </th>
+                  );
+                })}
               <th
                 className="text-center px-2 py-2 font-medium text-xs cursor-pointer hover:bg-muted/50 select-none"
                 onClick={() => toggleSort("score")}
