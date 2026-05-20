@@ -704,7 +704,7 @@ function AssessmentFormDialog({
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>(
     initial?.classIds ?? []
   );
-  const [classDateOverrides, setClassDateOverrides] = useState
+  const [classDateOverrides, setClassDateOverrides] = useState<
     Record<string, Record<number, string>>
   >({});
   const [showClassOverrides, setShowClassOverrides] = useState(false);
