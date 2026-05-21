@@ -47,9 +47,9 @@ const CLASS_BORDER_COLORS = [
   "border-l-4 border-l-orange-500",
   "border-l-4 border-l-teal-500",
   "border-l-4 border-l-pink-500",
-  "border-l-4 border-l-amber-500",
+  "border-l-4 border-l-green-500",
   "border-l-4 border-l-cyan-500",
-  "border-l-4 border-l-rose-500",
+  "border-l-4 border-l-red-500",
 ];
 
 export default function LessonsPage() {
