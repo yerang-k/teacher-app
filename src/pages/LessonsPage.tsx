@@ -33,12 +33,12 @@ import { useClassStore, useLessonStore } from "@/stores";
 import { todayKey, weekdaysOfThisWeek } from "@/lib/dateUtils";
 import type { Lesson, LessonStatus } from "@/types";
 
-const STATUS_OPTIONS: LessonStatus[] = ["예정", "진행중", "완료", "취소"];
+const STATUS_OPTIONS: LessonStatus[] = ["완료", "진행중", "예정", "취소"];
 
 const STATUS_STYLE: Record<LessonStatus, string> = {
-  예정: "bg-slate-100 text-slate-700 border-slate-200",
-  진행중: "bg-amber-100 text-amber-800 border-amber-200",
   완료: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  진행중: "bg-amber-100 text-amber-800 border-amber-200",
+  예정: "bg-slate-100 text-slate-700 border-slate-200",
   취소: "bg-rose-100 text-rose-700 border-rose-200",
 };
 const CLASS_BORDER_COLORS = [
@@ -96,6 +96,10 @@ export default function LessonsPage() {
     map.forEach((arr) => arr.sort((a, b) => a.period - b.period));
     return map;
   }, [lessons, weekDays, classId]);
+  const getClassBorderColor = (cId: string) => {
+  const idx = classes.findIndex((c) => c.id === cId);
+  return CLASS_BORDER_COLORS[idx >= 0 ? idx % CLASS_BORDER_COLORS.length : 0];
+};
 
   // 차시 추가/편집 다이얼로그 상태
   const [editing, setEditing] = useState<Partial<Lesson> | null>(null);
@@ -108,7 +112,7 @@ export default function LessonsPage() {
       period: 1,
       unit: "",
       topic: "",
-      status: "예정",
+      status: "완료",
     });
     setDialogOpen(true);
   };
@@ -277,7 +281,7 @@ export default function LessonsPage() {
                     <button
                       key={l.id}
                       onClick={() => openEdit(l)}
-                      className={`w-full text-left border rounded p-2 text-xs hover:shadow-sm transition-shadow ${STATUS_STYLE[l.status]}`}
+                      className={`w-full text-left border rounded p-2 text-xs hover:shadow-sm transition-shadow ${STATUS_STYLE[l.status]} ${getClassBorderColor(l.classId)}`}
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-semibold">
