@@ -41,6 +41,16 @@ const STATUS_STYLE: Record<LessonStatus, string> = {
   완료: "bg-emerald-100 text-emerald-800 border-emerald-200",
   취소: "bg-rose-100 text-rose-700 border-rose-200",
 };
+const CLASS_BORDER_COLORS = [
+  "border-l-4 border-l-blue-500",
+  "border-l-4 border-l-violet-500",
+  "border-l-4 border-l-orange-500",
+  "border-l-4 border-l-teal-500",
+  "border-l-4 border-l-pink-500",
+  "border-l-4 border-l-amber-500",
+  "border-l-4 border-l-cyan-500",
+  "border-l-4 border-l-rose-500",
+];
 
 export default function LessonsPage() {
   const classes = useClassStore((s) => s.classes);
