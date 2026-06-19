@@ -715,7 +715,7 @@ function ClassProgressDialog({
 
   const filtered = lessons
     .filter((l) => l.classId === classId)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.period - b.period);
+    .sort((a, b) => b.date.localeCompare(a.date) || a.period - b.period);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
