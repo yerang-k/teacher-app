@@ -56,8 +56,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="mt-auto pt-4 text-xs text-muted-foreground px-2 space-y-1">
           <div>v1.0 · 로컬 저장</div>
           <div>교사 도우미 &copy; 2026 KIMYERANG.</div>
-          <div>
+          <div className="break-keep">
             본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는
+            <br />
             복제·배포·수정은 금지합니다.
           </div>
         </div>
