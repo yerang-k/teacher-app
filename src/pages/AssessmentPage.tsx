@@ -976,7 +976,7 @@ function AssessmentFormDialog({
           <div className="space-y-2">
             <Label>대상 학급 *</Label>
             <div className="flex flex-wrap gap-2">
-              {classes.map((c) => (
+              {classes.filter((c) => !c.archived).map((c) => (
                 <button
                   key={c.id}
                   type="button"

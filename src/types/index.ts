@@ -18,6 +18,9 @@ export interface SchoolClass {
   classNumber: number;     // 반
   homeroom: boolean;       // 담임 학급 여부
   subject?: string;        // 교과 (예: '국어', '문학', '독서')
+  /** 보관(숨김) 여부. 지난 학기 학급을 기록은 남긴 채 선택 목록에서만 빼기 위한 플래그.
+   *  삭제와 달리 학생·수업·출결·행동기록이 모두 보존된다. */
+  archived?: boolean;
   createdAt: number;
   updatedAt: number;
 }

@@ -36,6 +36,7 @@ export default function ClassManagementPage() {
   const students = useClassStore((s) => s.students);
   const loadClasses = useClassStore((s) => s.loadAll);
   const addClass = useClassStore((s) => s.addClass);
+  const updateClass = useClassStore((s) => s.updateClass);
   const removeClass = useClassStore((s) => s.removeClass);
   const bulkAddStudents = useClassStore((s) => s.bulkAddStudents);
   const reloadTasks = useTaskStore((s) => s.loadAll);
@@ -50,6 +51,9 @@ export default function ClassManagementPage() {
   const [apiKey, setApiKey] = useState(settings.aiApiKey ?? "");
   const [showKey, setShowKey] = useState(false);
   const [syncUrl, setSyncUrlState] = useState(getSyncUrl() ?? "");
+
+  const activeClasses = classes.filter((c) => !c.archived);
+  const archivedClasses = classes.filter((c) => c.archived);
 
   // 학급 추가 폼
   const [newClass, setNewClass] = useState({
@@ -95,6 +99,18 @@ export default function ClassManagementPage() {
         { duration: 10000 }
       );
     }
+  };
+
+  const handleArchiveClass = async (c: SchoolClass) => {
+    await updateClass(c.id, { archived: true });
+    toast.success(
+      `${c.grade}-${c.classNumber} 학급을 보관했습니다. 기록은 모두 유지됩니다.`
+    );
+  };
+
+  const handleUnarchiveClass = async (c: SchoolClass) => {
+    await updateClass(c.id, { archived: false });
+    toast.success(`${c.grade}-${c.classNumber} 학급을 다시 사용합니다.`);
   };
 
   const handleAddClass = async () => {
@@ -380,12 +396,12 @@ export default function ClassManagementPage() {
           <Separator />
 
           <div className="space-y-2">
-            {classes.length === 0 && (
+            {activeClasses.length === 0 && (
               <p className="text-sm text-muted-foreground">
                 등록된 학급이 없습니다.
               </p>
             )}
-            {classes.map((c) => {
+            {activeClasses.map((c) => {
               const count = students.filter((s) => s.classId === c.id).length;
               return (
                 <div
@@ -403,16 +419,76 @@ export default function ClassManagementPage() {
                       학생 {count}명
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleRemoveClass(c)}
-                  >
-                    삭제
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="목록에서 숨깁니다. 학생·수업·출결 기록은 모두 유지됩니다."
+                      onClick={() => handleArchiveClass(c)}
+                    >
+                      보관
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveClass(c)}
+                    >
+                      삭제
+                    </Button>
+                  </div>
                 </div>
               );
             })}
+
+            {archivedClasses.length > 0 && (
+              <div className="pt-3">
+                <p className="text-xs font-medium text-muted-foreground mb-2">
+                  보관된 학급 ({archivedClasses.length}) — 기록은 모두 남아
+                  있으며, 선택 목록에서만 빠집니다
+                </p>
+                <div className="space-y-2">
+                  {archivedClasses.map((c) => {
+                    const count = students.filter(
+                      (s) => s.classId === c.id
+                    ).length;
+                    return (
+                      <div
+                        key={c.id}
+                        className="flex items-center justify-between border border-dashed rounded p-3 bg-muted/30"
+                      >
+                        <div>
+                          <div className="font-medium text-muted-foreground">
+                            {c.year}학년도 {c.grade}-{c.classNumber}{" "}
+                            <span className="text-xs ml-1">
+                              {c.homeroom ? "담임" : c.subject}
+                            </span>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            학생 {count}명
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleUnarchiveClass(c)}
+                          >
+                            보관 해제
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveClass(c)}
+                          >
+                            삭제
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -432,7 +508,7 @@ export default function ClassManagementPage() {
                 <SelectValue placeholder="학급 선택" />
               </SelectTrigger>
               <SelectContent>
-                {classes.map((c) => (
+                {activeClasses.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.grade}-{c.classNumber}{" "}
                     {c.homeroom ? "(담임)" : `(${c.subject})`}

@@ -220,7 +220,7 @@ export default function BehaviorNotesPage() {
                 <SelectValue placeholder="학급 선택" />
               </SelectTrigger>
               <SelectContent>
-                {classes.map((c) => (
+                {classes.filter((c) => !c.archived).map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.grade}-{c.classNumber}{" "}
                     {c.homeroom ? "(담임)" : `(${c.subject})`}
