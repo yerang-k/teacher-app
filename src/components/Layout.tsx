@@ -21,7 +21,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       {/* 사이드바 */}
-      <aside className="w-56 border-r bg-muted/30 p-4 flex flex-col gap-1">
+      {/* sticky + h-screen: 본문이 길어도 사이드바는 화면에 고정되어
+          하단의 저작권 표시까지 항상 보이게 함 */}
+      <aside className="w-56 border-r bg-muted/30 p-4 flex flex-col gap-1 sticky top-0 h-screen overflow-y-auto">
         <div className="px-2 pb-4 mb-2 border-b">
           <div className="font-bold text-lg">교사 도우미</div>
           <div className="text-xs text-muted-foreground">
