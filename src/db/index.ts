@@ -184,3 +184,47 @@ export function uid(): string {
 
 /** 현재 타임스탬프 */
 export const now = () => Date.now();
+
+// ---------------------------------------------------------------------------
+// 변경 감지 (클라우드 동기화용)
+//
+// 모든 테이블의 쓰기(생성/수정/삭제)를 한 곳에서 감지해 리스너에게 알립니다.
+// 복원처럼 "동기화를 유발하면 안 되는 대량 쓰기"는 runWithoutChangeEvents로
+// 감싸서 알림을 잠시 끕니다.
+// ---------------------------------------------------------------------------
+
+let changeListener: (() => void) | null = null;
+let changeEventsSuspended = false;
+let hooksAttached = false;
+
+function notifyChange() {
+  if (!changeEventsSuspended && changeListener) changeListener();
+}
+
+/** 데이터 변경 시 호출될 리스너를 등록합니다. 최초 호출 때 훅을 연결합니다. */
+export function setChangeListener(cb: () => void) {
+  changeListener = cb;
+  if (hooksAttached) return;
+  hooksAttached = true;
+  for (const t of db.tables) {
+    t.hook('creating', function () {
+      notifyChange();
+    });
+    t.hook('updating', function () {
+      notifyChange();
+    });
+    t.hook('deleting', function () {
+      notifyChange();
+    });
+  }
+}
+
+/** fn 실행 동안 변경 알림을 끕니다 (복원/클라우드 내려받기용). */
+export async function runWithoutChangeEvents<T>(fn: () => Promise<T>): Promise<T> {
+  changeEventsSuspended = true;
+  try {
+    return await fn();
+  } finally {
+    changeEventsSuspended = false;
+  }
+}

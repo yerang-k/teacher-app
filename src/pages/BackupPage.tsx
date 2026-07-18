@@ -9,10 +9,49 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { exportData, importData } from "@/lib/dataBackup";
+import {
+  getSyncUrl,
+  getLastSyncedAt,
+  hasPendingChanges,
+  pushNow,
+  pullNow,
+} from "@/lib/cloudSync";
 
 export default function BackupPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const syncUrl = getSyncUrl();
+  const lastSynced = getLastSyncedAt();
+  const pending = hasPendingChanges();
+
+  const handleCloudPush = async () => {
+    setSyncing(true);
+    try {
+      await pushNow();
+      toast.success("클라우드(구글 드라이브)에 저장했습니다.");
+    } catch (e) {
+      toast.error(`올리기 실패: ${e instanceof Error ? e.message : "알 수 없는 오류"}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleCloudPull = async () => {
+    const confirmed = confirm(
+      "클라우드의 내용으로 이 기기의 모든 데이터를 대체합니다.\n계속하시겠습니까?"
+    );
+    if (!confirmed) return;
+    setSyncing(true);
+    try {
+      await pullNow();
+      toast.success("클라우드에서 불러왔습니다. 앱을 새로고침합니다.");
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e) {
+      toast.error(`내려받기 실패: ${e instanceof Error ? e.message : "알 수 없는 오류"}`);
+      setSyncing(false);
+    }
+  };
 
   const handleExport = async () => {
     try {
@@ -104,6 +143,42 @@ export default function BackupPage() {
               {importing ? "복원 중..." : "백업 파일 선택해서 복원"}
             </Button>
           </CardContent>
+        </Card>
+
+        {/* 클라우드 동기화 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">☁️ 구글 드라이브 동기화</CardTitle>
+            <CardDescription>
+              {syncUrl ? (
+                <>
+                  {lastSynced
+                    ? `마지막 동기화: ${new Date(lastSynced).toLocaleString("ko-KR")}`
+                    : "아직 동기화한 적이 없습니다."}
+                  {pending && (
+                    <span className="text-amber-600"> · 올리지 않은 변경이 있습니다</span>
+                  )}
+                </>
+              ) : (
+                "설정 탭에서 동기화 주소를 먼저 등록하세요. 등록하면 기록이 자동으로 내 구글 드라이브에 저장되고, 다른 기기에서 열 때 자동으로 불러옵니다."
+              )}
+            </CardDescription>
+          </CardHeader>
+          {syncUrl && (
+            <CardContent className="flex gap-2">
+              <Button className="flex-1" disabled={syncing} onClick={handleCloudPush}>
+                {syncing ? "동기화 중..." : "지금 올리기"}
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                disabled={syncing}
+                onClick={handleCloudPull}
+              >
+                클라우드에서 내려받기
+              </Button>
+            </CardContent>
+          )}
         </Card>
 
         {/* 안내 */}
