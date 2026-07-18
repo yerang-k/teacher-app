@@ -22,6 +22,8 @@ import {
   useSettingsStore,
 } from "@/stores";
 import { seedIfEmpty } from "@/lib/seed";
+import { autoSyncOnLaunch, enableAutoSync } from "@/lib/cloudSync";
+import { toast } from "sonner";
 
 function Router() {
   return (
@@ -53,10 +55,17 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         await seedIfEmpty();
+        // 스토어 적재 전에 클라우드와 맞춰야 화면이 처음부터 최신 데이터로 뜹니다
+        const sync = await autoSyncOnLaunch();
         await Promise.all([loadSettings(), loadClasses(), loadTasks()]);
+        if (sync === "pulled") {
+          toast.success("다른 기기의 최신 기록을 불러왔습니다.");
+        }
       } catch (e) {
         console.error("앱 초기화 실패:", e);
       } finally {
+        // 초기 적재가 끝난 뒤부터만 변경을 감지해, 시드/적재가 동기화를 유발하지 않게 함
+        enableAutoSync();
         setReady(true);
       }
     })();

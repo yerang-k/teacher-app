@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 
 import { db } from "@/db";
+import { getSyncUrl, setSyncUrl as setSyncUrl2 } from "@/lib/cloudSync";
 import {
   useClassStore,
   useSettingsStore,
@@ -48,6 +49,7 @@ export default function ClassManagementPage() {
   const [semester, setSemester] = useState<Semester>(settings.currentSemester);
   const [apiKey, setApiKey] = useState(settings.aiApiKey ?? "");
   const [showKey, setShowKey] = useState(false);
+  const [syncUrl, setSyncUrlState] = useState(getSyncUrl() ?? "");
 
   // 학급 추가 폼
   const [newClass, setNewClass] = useState({
@@ -70,6 +72,13 @@ export default function ClassManagementPage() {
   }, [settings]);
 
   const saveSettings = async () => {
+    const trimmedSync = syncUrl.trim();
+    if (trimmedSync && !trimmedSync.startsWith("https://script.google.com/")) {
+      toast.error(
+        "동기화 주소는 https://script.google.com/ 으로 시작하는 웹앱 주소여야 합니다."
+      );
+      return;
+    }
     await updateSettings({
       teacherName,
       schoolName,
@@ -77,7 +86,15 @@ export default function ClassManagementPage() {
       currentSemester: semester,
       aiApiKey: apiKey || undefined,
     });
+    const hadSync = !!getSyncUrl();
+    setSyncUrl2(trimmedSync || null);
     toast.success("설정을 저장했습니다.");
+    if (trimmedSync && !hadSync) {
+      toast.info(
+        "동기화 주소가 등록되었습니다. 백업/복원 탭에서 '지금 올리기'(주 사용 기기) 또는 '내려받기'(새 기기)를 한 번 눌러 시작하세요.",
+        { duration: 10000 }
+      );
+    }
   };
 
   const handleAddClass = async () => {
@@ -265,6 +282,20 @@ export default function ClassManagementPage() {
             </div>
             <p className="text-xs text-muted-foreground">
               AI 보고서 생성에만 사용됩니다. 키는 이 컴퓨터의 브라우저(IndexedDB)에만 저장되며 외부로 전송되지 않습니다.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>구글 드라이브 동기화 주소</Label>
+            <Input
+              value={syncUrl}
+              onChange={(e) => setSyncUrlState(e.target.value)}
+              placeholder="https://script.google.com/macros/s/.../exec?key=..."
+            />
+            <p className="text-xs text-muted-foreground">
+              비워두면 동기화하지 않습니다. 주소를 등록하면 기록이 바뀔 때마다 내
+              구글 드라이브의 비공개 파일로 자동 저장되고, 다른 기기에서 열면
+              자동으로 불러옵니다. API 키는 동기화에 포함되지 않습니다.
             </p>
           </div>
 
