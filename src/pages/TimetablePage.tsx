@@ -287,7 +287,7 @@ function Row({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">— 비움 —</SelectItem>
-                  {classes.map((c) => (
+                  {classes.filter((c) => !c.archived).map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.grade}-{c.classNumber}{" "}
                       {c.homeroom ? "(담임)" : `(${c.subject})`}

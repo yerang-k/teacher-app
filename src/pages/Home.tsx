@@ -75,7 +75,7 @@ export default function Home() {
   }, [today]);
 
   // 담임 학급 출결 입력 여부 체크
-  const homeroom = classes.find((c) => c.homeroom);
+  const homeroom = classes.find((c) => c.homeroom && !c.archived);
   const homeroomStudents = useMemo(
     () => (homeroom ? students.filter((s) => s.classId === homeroom.id) : []),
     [homeroom, students]
@@ -219,7 +219,7 @@ export default function Home() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard
           label="담당 학급"
-          value={classes.length}
+          value={classes.filter((c) => !c.archived).length}
           sub={`학생 ${students.length}명`}
         />
         <StatCard

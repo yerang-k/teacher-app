@@ -188,7 +188,7 @@ export default function AttendancePage() {
                 <SelectValue placeholder="학급을 선택하세요" />
               </SelectTrigger>
               <SelectContent>
-                {classes.map((c) => (
+                {classes.filter((c) => !c.archived).map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.grade}학년 {c.classNumber}반{" "}
                     {c.homeroom ? "(담임)" : `(${c.subject})`}

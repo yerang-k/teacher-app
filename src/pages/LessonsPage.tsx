@@ -213,7 +213,7 @@ export default function LessonsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">전체 학급</SelectItem>
-                {classes.map((c) => (
+                {classes.filter((c) => !c.archived).map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.grade}-{c.classNumber}{" "}
                     {c.homeroom ? "(담임)" : `(${c.subject})`}
@@ -381,7 +381,7 @@ export default function LessonsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {classes.map((c) => (
+                      {classes.filter((c) => !c.archived).map((c) => (
                         <SelectItem key={c.id} value={c.id}>
                           {c.grade}-{c.classNumber}{" "}
                           {c.homeroom ? "(담임)" : `(${c.subject})`}
