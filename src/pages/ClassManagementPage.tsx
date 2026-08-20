@@ -39,6 +39,9 @@ export default function ClassManagementPage() {
   const updateClass = useClassStore((s) => s.updateClass);
   const removeClass = useClassStore((s) => s.removeClass);
   const bulkAddStudents = useClassStore((s) => s.bulkAddStudents);
+  const addStudent = useClassStore((s) => s.addStudent);
+  const updateStudent = useClassStore((s) => s.updateStudent);
+  const removeStudent = useClassStore((s) => s.removeStudent);
   const reloadTasks = useTaskStore((s) => s.loadAll);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +69,61 @@ export default function ClassManagementPage() {
   // 학생 일괄 추가 폼
   const [bulkClassId, setBulkClassId] = useState<string>("");
   const [bulkText, setBulkText] = useState<string>("");
+
+  // 학급별 학생 명단 편집
+  const [rosterClassId, setRosterClassId] = useState<string>("");
+  const [newStudent, setNewStudent] = useState<{
+    number: string;
+    name: string;
+    gender: "남" | "여" | "";
+  }>({ number: "", name: "", gender: "" });
+
+  const rosterStudents = students
+    .filter((s) => s.classId === rosterClassId)
+    .sort((a, b) => a.number - b.number);
+
+  const handleUpdateStudentField = async (
+    id: string,
+    patch: Partial<{ number: number; name: string; gender: "남" | "여" }>
+  ) => {
+    await updateStudent(id, patch);
+  };
+
+  const handleRemoveStudent = async (id: string, name: string) => {
+    if (
+      !confirm(
+        `${name} 학생을 명단에서 삭제합니다. 이 학생의 출결·행동기록도 함께 삭제됩니다. 진행할까요?`
+      )
+    )
+      return;
+    await removeStudent(id);
+    toast.success(`${name} 학생을 삭제했습니다.`);
+  };
+
+  const handleAddSingleStudent = async () => {
+    if (!rosterClassId) {
+      toast.error("학급을 먼저 선택하세요.");
+      return;
+    }
+    const number = Number(newStudent.number);
+    const name = newStudent.name.trim();
+    if (!name) {
+      toast.error("이름을 입력하세요.");
+      return;
+    }
+    if (isNaN(number) || number <= 0) {
+      toast.error("번호를 확인하세요.");
+      return;
+    }
+    await addStudent({
+      classId: rosterClassId,
+      number,
+      name,
+      gender: newStudent.gender || undefined,
+    });
+    toast.success(`${name} 학생을 추가했습니다.`);
+    setNewStudent({ number: "", name: "", gender: "" });
+  };
 
   useEffect(() => {
     setTeacherName(settings.teacherName ?? "");
@@ -526,6 +584,144 @@ export default function ClassManagementPage() {
           <div className="flex justify-end">
             <Button onClick={handleBulkAdd}>등록</Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* 학급별 학생 명단 관리 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">학급별 학생 명단 수정</CardTitle>
+          <CardDescription>
+            학급을 선택하면 등록된 학생 명단이 나옵니다. 전학 간 학생은 삭제하고,
+            전입 온 학생은 아래에서 추가하세요. 번호·이름·성별은 칸을 눌러 바로
+            고칠 수 있습니다.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Select value={rosterClassId} onValueChange={setRosterClassId}>
+              <SelectTrigger>
+                <SelectValue placeholder="학급 선택" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeClasses.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.grade}-{c.classNumber}{" "}
+                    {c.homeroom ? "(담임)" : `(${c.subject})`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {rosterClassId && (
+            <>
+              <div className="space-y-2">
+                {rosterStudents.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    등록된 학생이 없습니다. 아래에서 추가하세요.
+                  </p>
+                )}
+                {rosterStudents.map((s) => (
+                  <div
+                    key={s.id}
+                    className="grid grid-cols-[64px_1fr_88px_auto] gap-2 items-center"
+                  >
+                    <Input
+                      type="number"
+                      defaultValue={s.number}
+                      onBlur={(e) => {
+                        const n = Number(e.target.value);
+                        if (!isNaN(n) && n > 0 && n !== s.number) {
+                          handleUpdateStudentField(s.id, { number: n });
+                        }
+                      }}
+                    />
+                    <Input
+                      defaultValue={s.name}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (v && v !== s.name) {
+                          handleUpdateStudentField(s.id, { name: v });
+                        }
+                      }}
+                    />
+                    <Select
+                      value={s.gender ?? ""}
+                      onValueChange={(v) =>
+                        handleUpdateStudentField(s.id, {
+                          gender: v as "남" | "여",
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="성별" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="남">남</SelectItem>
+                        <SelectItem value="여">여</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveStudent(s.id, s.name)}
+                    >
+                      삭제
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <Separator />
+
+              <div>
+                <Label className="text-xs text-muted-foreground">
+                  전입 학생 추가
+                </Label>
+                <div className="grid grid-cols-[64px_1fr_88px_auto] gap-2 items-center mt-1.5">
+                  <Input
+                    type="number"
+                    placeholder="번호"
+                    value={newStudent.number}
+                    onChange={(e) =>
+                      setNewStudent((v) => ({ ...v, number: e.target.value }))
+                    }
+                  />
+                  <Input
+                    placeholder="이름"
+                    value={newStudent.name}
+                    onChange={(e) =>
+                      setNewStudent((v) => ({ ...v, name: e.target.value }))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleAddSingleStudent();
+                    }}
+                  />
+                  <Select
+                    value={newStudent.gender || "성별"}
+                    onValueChange={(v) =>
+                      setNewStudent((s) => ({
+                        ...s,
+                        gender: v as "남" | "여",
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="성별" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="남">남</SelectItem>
+                      <SelectItem value="여">여</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" onClick={handleAddSingleStudent}>
+                    추가
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
