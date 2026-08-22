@@ -136,6 +136,12 @@ export interface SchoolTask {
   createdAt: number;
   updatedAt: number;
   completedAt?: number;
+
+  // 출처 정보 (업무알리미 메신저 연동 등에서 자동 등록될 때 채워짐)
+  source?: 'messenger' | 'manual';
+  sender?: string;      // 메신저 발신자
+  receivedAt?: string;  // 메신저 수신시각
+  sourceBody?: string;  // 메신저 원문
 }
 
 // ============ AI 보고서 ============

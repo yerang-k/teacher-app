@@ -2,9 +2,6 @@ import { useEffect, useState } from "react";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +26,7 @@ import {
 import { toast } from "sonner";
 
 import { useTaskStore } from "@/stores";
-import { todayKey } from "@/lib/dateUtils";
+import { todayKey, daysBetween } from "@/lib/dateUtils";
 import type {
   SchoolTask,
   TaskCategory,
@@ -56,6 +53,12 @@ const PRIORITY_COLOR: Record<TaskPriority, string> = {
   높음: "bg-amber-100 text-amber-800",
   긴급: "bg-rose-100 text-rose-800",
 };
+const PRIORITY_ORDER: Record<TaskPriority, number> = {
+  긴급: 0,
+  높음: 1,
+  보통: 2,
+  낮음: 3,
+};
 
 const CATEGORY_COLOR: Record<TaskCategory, string> = {
   정보부: "bg-indigo-50 text-indigo-700 border-indigo-200",
@@ -67,6 +70,39 @@ const CATEGORY_COLOR: Record<TaskCategory, string> = {
   연수: "bg-amber-50 text-amber-700 border-amber-200",
   기타: "bg-zinc-50 text-zinc-700 border-zinc-200",
 };
+
+// 마감일 기준 섹션 정의
+type GroupKey = "지연" | "오늘" | "이번 주" | "앞으로" | "기한 없음" | "완료";
+const GROUP_META: Record<GroupKey, { emoji: string; desc: string; accent: string }> = {
+  지연: { emoji: "🔴", desc: "마감이 지났어요", accent: "text-rose-600" },
+  오늘: { emoji: "☀️", desc: "오늘까지", accent: "text-orange-600" },
+  "이번 주": { emoji: "📅", desc: "7일 이내", accent: "text-amber-600" },
+  앞으로: { emoji: "🗓️", desc: "여유 있음", accent: "text-slate-600" },
+  "기한 없음": { emoji: "⬜", desc: "마감일 미정", accent: "text-slate-500" },
+  완료: { emoji: "✅", desc: "끝낸 업무", accent: "text-emerald-600" },
+};
+const GROUP_ORDER: GroupKey[] = ["지연", "오늘", "이번 주", "앞으로", "기한 없음", "완료"];
+
+/** 마감일 → D-day 배지 정보 */
+function dInfo(dueDate: string | undefined, done: boolean) {
+  if (done) return { label: "완료", cls: "bg-emerald-100 text-emerald-700" };
+  if (!dueDate) return { label: "기한없음", cls: "bg-slate-100 text-slate-500" };
+  const d = daysBetween(todayKey(), dueDate);
+  if (d < 0) return { label: `${-d}일 지남`, cls: "bg-rose-600 text-white" };
+  if (d === 0) return { label: "D-DAY", cls: "bg-rose-500 text-white" };
+  if (d <= 7) return { label: `D-${d}`, cls: "bg-amber-100 text-amber-800" };
+  return { label: `D-${d}`, cls: "bg-slate-100 text-slate-600" };
+}
+
+function groupOf(t: SchoolTask): GroupKey {
+  if (t.status === "완료") return "완료";
+  if (!t.dueDate) return "기한 없음";
+  const d = daysBetween(todayKey(), t.dueDate);
+  if (d < 0) return "지연";
+  if (d === 0) return "오늘";
+  if (d <= 7) return "이번 주";
+  return "앞으로";
+}
 
 export default function TasksPage() {
   const tasks = useTaskStore((s) => s.tasks);
@@ -81,12 +117,12 @@ export default function TasksPage() {
   const setStatus = useTaskStore((s) => s.setStatus);
   const toggleChecklist = useTaskStore((s) => s.toggleChecklistItem);
   const addChecklistItem = useTaskStore((s) => s.addChecklistItem);
-  const overdue = useTaskStore((s) => s.overdue());
-  const upcoming = useTaskStore((s) => s.upcoming(7));
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<SchoolTask> | null>(null);
   const [checklistInput, setChecklistInput] = useState("");
+  const [showDone, setShowDone] = useState(false);
+  const [showSource, setShowSource] = useState(false);
 
   useEffect(() => {
     loadAll();
@@ -106,6 +142,7 @@ export default function TasksPage() {
 
   const openEdit = (t: SchoolTask) => {
     setEditing(t);
+    setShowSource(false);
     setDialogOpen(true);
   };
 
@@ -141,99 +178,129 @@ export default function TasksPage() {
     setEditing(null);
   };
 
+  // 필터 적용 후 마감일 섹션으로 묶기
   const view = filtered();
-  const byStatus: Record<TaskStatus, SchoolTask[]> = {
-    대기: [],
-    진행중: [],
-    보류: [],
+  const groups: Record<GroupKey, SchoolTask[]> = {
+    지연: [],
+    오늘: [],
+    "이번 주": [],
+    앞으로: [],
+    "기한 없음": [],
     완료: [],
   };
-  view.forEach((t) => byStatus[t.status].push(t));
+  view.forEach((t) => groups[groupOf(t)].push(t));
 
-  // 다음 상태로 이동
-  const nextStatus = (s: TaskStatus): TaskStatus | null => {
-    if (s === "대기") return "진행중";
-    if (s === "진행중") return "완료";
-    return null;
+  const byDue = (a: SchoolTask, b: SchoolTask) => {
+    const c = (a.dueDate ?? "9999-12-31").localeCompare(b.dueDate ?? "9999-12-31");
+    if (c !== 0) return c;
+    return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
+  };
+  groups["지연"].sort(byDue);
+  groups["오늘"].sort(byDue);
+  groups["이번 주"].sort(byDue);
+  groups["앞으로"].sort(byDue);
+  groups["기한 없음"].sort(
+    (a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority] || b.updatedAt - a.updatedAt
+  );
+  groups["완료"].sort((a, b) => (b.completedAt ?? b.updatedAt) - (a.completedAt ?? a.updatedAt));
+
+  const activeCount =
+    view.length - groups["완료"].length;
+
+  const TaskRow = ({ t }: { t: SchoolTask }) => {
+    const done = t.status === "완료";
+    const dd = dInfo(t.dueDate, done);
+    const checkDone = t.checklist?.filter((c) => c.done).length ?? 0;
+    const checkTotal = t.checklist?.length ?? 0;
+    return (
+      <div className="flex items-center gap-3 rounded-lg border bg-background px-3 py-2.5 hover:bg-muted/40 transition-colors">
+        {/* 완료 토글 */}
+        <button
+          title={done ? "완료 취소" : "완료 처리"}
+          onClick={() => setStatus(t.id, done ? "대기" : "완료")}
+          className={`shrink-0 h-5 w-5 rounded-full border-2 flex items-center justify-center text-[11px] ${
+            done
+              ? "bg-emerald-500 border-emerald-500 text-white"
+              : "border-slate-300 text-transparent hover:border-emerald-400"
+          }`}
+        >
+          ✓
+        </button>
+
+        {/* D-day */}
+        <span
+          className={`shrink-0 w-16 text-center text-xs font-bold rounded px-1.5 py-1 ${dd.cls}`}
+        >
+          {dd.label}
+        </span>
+
+        {/* 본문 (클릭 시 편집) */}
+        <button
+          onClick={() => openEdit(t)}
+          className="flex-1 min-w-0 text-left"
+        >
+          <div
+            className={`font-medium text-sm truncate flex items-center gap-1 ${
+              done ? "line-through text-muted-foreground" : ""
+            }`}
+          >
+            {t.source === "messenger" && (
+              <span title="메신저에서 자동 등록됨" className="shrink-0">✉️</span>
+            )}
+            <span className="truncate">{t.title}</span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <Badge className={CATEGORY_COLOR[t.category]} variant="outline">
+              {t.category}
+            </Badge>
+            <Badge className={PRIORITY_COLOR[t.priority]} variant="outline">
+              {t.priority}
+            </Badge>
+            {t.dueDate && (
+              <span className="text-xs text-muted-foreground">{t.dueDate}</span>
+            )}
+            {checkTotal > 0 && (
+              <span className="text-xs text-muted-foreground">
+                ☑ {checkDone}/{checkTotal}
+              </span>
+            )}
+            {t.status !== "완료" && t.status !== "대기" && (
+              <span className="text-xs text-muted-foreground">· {t.status}</span>
+            )}
+          </div>
+        </button>
+      </div>
+    );
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6 max-w-7xl">
-      <div className="flex items-start justify-between">
+    <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-3xl">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">업무 관리</h1>
-          <p className="text-muted-foreground">
-            정보부장·AI디지털 선도학교·담임 업무를 한 곳에서 관리합니다.
+          <p className="text-sm text-muted-foreground">
+            마감일 기준으로 정리했어요. 처리할 일이 {activeCount}건 있습니다.
           </p>
         </div>
-        <Button onClick={openNew}>+ 새 업무</Button>
-      </div>
-
-      {/* 알림 카드 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <Card className={overdue.length > 0 ? "border-rose-300" : ""}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <span className="text-rose-600">⚠️</span>
-              지연된 업무 ({overdue.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {overdue.length === 0 ? (
-              <p className="text-xs text-muted-foreground">지연 업무 없음</p>
-            ) : (
-              overdue.slice(0, 5).map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => openEdit(t)}
-                  className="block w-full text-left text-xs hover:underline"
-                >
-                  {t.dueDate} — {t.title}
-                </button>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className={upcoming.length > 0 ? "border-amber-300" : ""}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <span className="text-amber-600">📅</span>
-              이번 주 마감 ({upcoming.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {upcoming.length === 0 ? (
-              <p className="text-xs text-muted-foreground">임박 업무 없음</p>
-            ) : (
-              upcoming.slice(0, 5).map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => openEdit(t)}
-                  className="block w-full text-left text-xs hover:underline"
-                >
-                  {t.dueDate} — {t.title}
-                </button>
-              ))
-            )}
-          </CardContent>
-        </Card>
+        <Button onClick={openNew} className="shrink-0">
+          + 새 업무
+        </Button>
       </div>
 
       {/* 필터 */}
       <Card>
-        <CardContent className="pt-6 flex flex-wrap items-end gap-3">
+        <CardContent className="pt-4 flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
             <Label>분류</Label>
             <Select
               value={filters.category ?? ""}
               onValueChange={(v) =>
                 setFilters({
-                  category: (v || undefined) as TaskCategory | undefined,
+                  category: (v === "all" ? undefined : (v as TaskCategory)) || undefined,
                 })
               }
             >
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger className="w-[150px]">
                 <SelectValue placeholder="전체" />
               </SelectTrigger>
               <SelectContent>
@@ -252,11 +319,11 @@ export default function TasksPage() {
               value={filters.priority ?? ""}
               onValueChange={(v) =>
                 setFilters({
-                  priority: (v || undefined) as TaskPriority | undefined,
+                  priority: (v === "all" ? undefined : (v as TaskPriority)) || undefined,
                 })
               }
             >
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[130px]">
                 <SelectValue placeholder="전체" />
               </SelectTrigger>
               <SelectContent>
@@ -269,7 +336,7 @@ export default function TasksPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5 flex-1 min-w-[200px]">
+          <div className="space-y-1.5 flex-1 min-w-[160px]">
             <Label>검색</Label>
             <Input
               placeholder="제목·내용 검색"
@@ -278,98 +345,61 @@ export default function TasksPage() {
             />
           </div>
           <Button variant="ghost" onClick={clearFilters}>
-            필터 초기화
+            초기화
           </Button>
         </CardContent>
       </Card>
 
-      {/* 칸반 보드 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        {STATUSES.map((s) => (
-          <Card key={s} className="bg-muted/30">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center justify-between">
-                <span>{s}</span>
-                <Badge variant="outline">{byStatus[s].length}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 min-h-[200px]">
-              {byStatus[s].map((t) => {
-                const isOverdue =
-                  t.dueDate && t.dueDate < todayKey() && t.status !== "완료";
-                return (
-                  <div
-                    key={t.id}
-                    className={`bg-background border rounded p-2 space-y-1.5 ${
-                      isOverdue ? "border-rose-300" : ""
-                    }`}
-                  >
-                    <button
-                      className="block w-full text-left"
-                      onClick={() => openEdit(t)}
+      {/* 마감일 섹션 목록 */}
+      {view.length === 0 ? (
+        <div className="text-center text-muted-foreground py-16">
+          <p className="text-4xl mb-2">🗒️</p>
+          <p>표시할 업무가 없습니다.</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {GROUP_ORDER.map((key) => {
+            const items = groups[key];
+            if (items.length === 0) return null;
+            const meta = GROUP_META[key];
+            const collapsed = key === "완료" && !showDone;
+            return (
+              <section key={key}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">{meta.emoji}</span>
+                  <h2 className={`font-semibold ${meta.accent}`}>{key}</h2>
+                  <span className="text-xs text-muted-foreground">
+                    {meta.desc} · {items.length}건
+                  </span>
+                  {key === "완료" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto h-7 text-xs"
+                      onClick={() => setShowDone((v) => !v)}
                     >
-                      <div className="font-medium text-sm line-clamp-2">
-                        {t.title}
-                      </div>
-                    </button>
-                    <div className="flex flex-wrap items-center gap-1">
-                      <Badge
-                        className={CATEGORY_COLOR[t.category]}
-                        variant="outline"
-                      >
-                        {t.category}
-                      </Badge>
-                      <Badge className={PRIORITY_COLOR[t.priority]} variant="outline">
-                        {t.priority}
-                      </Badge>
-                      {t.dueDate && (
-                        <span
-                          className={`text-xs ${
-                            isOverdue
-                              ? "text-rose-600 font-semibold"
-                              : "text-muted-foreground"
-                          }`}
-                        >
-                          {t.dueDate}
-                        </span>
-                      )}
-                    </div>
-                    {t.checklist && t.checklist.length > 0 && (
-                      <div className="text-xs text-muted-foreground">
-                        ☑ {t.checklist.filter((c) => c.done).length}/
-                        {t.checklist.length}
-                      </div>
-                    )}
-                    {nextStatus(t.status) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full text-xs h-7"
-                        onClick={() => setStatus(t.id, nextStatus(t.status)!)}
-                      >
-                        → {nextStatus(t.status)}로 이동
-                      </Button>
-                    )}
+                      {showDone ? "접기" : "펼치기"}
+                    </Button>
+                  )}
+                </div>
+                {!collapsed && (
+                  <div className="space-y-2">
+                    {items.map((t) => (
+                      <TaskRow key={t.id} t={t} />
+                    ))}
                   </div>
-                );
-              })}
-              {byStatus[s].length === 0 && (
-                <p className="text-xs text-muted-foreground italic">
-                  업무 없음
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      )}
 
       {/* 추가/편집 다이얼로그 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>
-              {editing?.id ? "업무 수정" : "새 업무"}
-            </DialogTitle>
+            <DialogTitle>{editing?.id ? "업무 수정" : "새 업무"}</DialogTitle>
             <DialogDescription>
               제목과 분류, 마감일, 체크리스트를 입력하세요.
             </DialogDescription>
@@ -377,6 +407,51 @@ export default function TasksPage() {
 
           {editing && (
             <div className="space-y-3">
+              {editing.source === "messenger" && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-1.5 text-sm">
+                  <div className="flex items-center gap-1.5 font-medium text-blue-800">
+                    <span>✉️</span> 메신저에서 자동 등록된 업무
+                  </div>
+                  {editing.sender && (
+                    <div className="flex gap-2">
+                      <span className="w-16 shrink-0 text-blue-700/70">발신자</span>
+                      <span className="text-slate-700">{editing.sender}</span>
+                    </div>
+                  )}
+                  {editing.receivedAt && (
+                    <div className="flex gap-2">
+                      <span className="w-16 shrink-0 text-blue-700/70">수신시각</span>
+                      <span className="text-slate-700">{editing.receivedAt}</span>
+                    </div>
+                  )}
+                  {editing.attachments && editing.attachments.length > 0 && (
+                    <div className="flex gap-2">
+                      <span className="w-16 shrink-0 text-blue-700/70">첨부</span>
+                      <div className="space-y-0.5">
+                        {editing.attachments.map((a, i) => (
+                          <div key={i} className="text-slate-700">📎 {a}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {editing.sourceBody && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setShowSource((v) => !v)}
+                        className="text-xs text-blue-700 underline"
+                      >
+                        {showSource ? "원문 접기" : "원문 보기"}
+                      </button>
+                      {showSource && (
+                        <pre className="mt-1.5 max-h-60 overflow-auto whitespace-pre-wrap rounded border bg-white p-2 text-xs text-slate-700">
+                          {editing.sourceBody}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label>제목 *</Label>
                 <Input
@@ -387,9 +462,12 @@ export default function TasksPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>설명</Label>
+                <Label>
+                  {editing.source === "messenger" ? "정리 내용 / 메모" : "상세 내용"}
+                </Label>
                 <Textarea
-                  rows={3}
+                  rows={4}
+                  placeholder="업무의 구체적인 내용, 준비물, 메모 등을 자유롭게 적어두세요."
                   value={editing.description ?? ""}
                   onChange={(e) =>
                     setEditing((x) => ({ ...x, description: e.target.value }))
@@ -512,7 +590,7 @@ export default function TasksPage() {
                 ))}
                 <div className="flex gap-2">
                   <Input
-                    placeholder="체크리스트 항목"
+                    placeholder="체크리스트 항목 입력 후 Enter"
                     value={checklistInput}
                     onChange={(e) => setChecklistInput(e.target.value)}
                     onKeyDown={(e) => {
