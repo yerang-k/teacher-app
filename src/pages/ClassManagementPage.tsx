@@ -53,6 +53,7 @@ export default function ClassManagementPage() {
   const [semester, setSemester] = useState<Semester>(settings.currentSemester);
   const [apiKey, setApiKey] = useState(settings.aiApiKey ?? "");
   const [showKey, setShowKey] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [syncUrl, setSyncUrlState] = useState(getSyncUrl() ?? "");
 
   const activeClasses = classes.filter((c) => !c.archived);
@@ -500,11 +501,16 @@ export default function ClassManagementPage() {
 
             {archivedClasses.length > 0 && (
               <div className="pt-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2">
+                <button
+                  type="button"
+                  onClick={() => setShowArchived((v) => !v)}
+                  className="flex items-center gap-1 text-xs font-medium text-muted-foreground mb-2 hover:text-foreground"
+                >
+                  <span className="inline-block transition-transform" style={{ transform: showArchived ? "rotate(90deg)" : "none" }}>▶</span>
                   보관된 학급 ({archivedClasses.length}) — 기록은 모두 남아
                   있으며, 선택 목록에서만 빠집니다
-                </p>
-                <div className="space-y-2">
+                </button>
+                <div className="space-y-2" hidden={!showArchived}>
                   {archivedClasses.map((c) => {
                     const count = students.filter(
                       (s) => s.classId === c.id
