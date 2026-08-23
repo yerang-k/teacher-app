@@ -11,6 +11,7 @@ import type {
   TimetableSlot,
   Assessment,
   AssessmentRecord,
+  Curriculum,
 } from '@/types';
 
 /**
@@ -31,6 +32,7 @@ export class TeacherDB extends Dexie {
   timetable!: Table<TimetableSlot, string>;
   assessments!: Table<Assessment, string>;
   assessmentRecords!: Table<AssessmentRecord, string>;
+  curricula!: Table<Curriculum, string>;
   constructor() {
     super('TeacherAppDB');
 
@@ -60,6 +62,10 @@ export class TeacherDB extends Dexie {
       assessments: 'id, subject, [year+semester]',
       assessmentRecords: 'id, assessmentId, studentId, classId',
     });
+    // v4: 진도 순서(커리큘럼) 테이블 추가
+    this.version(4).stores({
+      curricula: 'id',
+    });
   }
 
   /**
@@ -80,6 +86,7 @@ export class TeacherDB extends Dexie {
         this.timetable,
         this.assessments,
         this.assessmentRecords,
+        this.curricula,
       ],
       async () => {
         await Promise.all([
@@ -94,6 +101,7 @@ export class TeacherDB extends Dexie {
           this.timetable.clear(),
           this.assessments.clear(),
           this.assessmentRecords.clear(),
+          this.curricula.clear(),
         ]);
       }
     );

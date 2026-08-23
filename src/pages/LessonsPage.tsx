@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -32,6 +31,7 @@ import { toast } from "sonner";
 import { useClassStore, useLessonStore } from "@/stores";
 import { todayKey, weekdaysOfThisWeek } from "@/lib/dateUtils";
 import type { Lesson, LessonStatus } from "@/types";
+import WeeklyProgressFill from "@/components/WeeklyProgressFill";
 
 const STATUS_OPTIONS: LessonStatus[] = ["완료", "진행중", "예정", "취소"];
 
@@ -59,7 +59,6 @@ export default function LessonsPage() {
   const addLesson = useLessonStore((s) => s.addLesson);
   const updateLesson = useLessonStore((s) => s.updateLesson);
   const removeLesson = useLessonStore((s) => s.removeLesson);
-  const bulkAddWeekly = useLessonStore((s) => s.bulkAddWeekly);
 
   const [classId, setClassId] = useState<string>("all");
   const [weekStart, setWeekStart] = useState<string>(
@@ -163,31 +162,6 @@ export default function LessonsPage() {
     const d = new Date(weekStart);
     d.setDate(d.getDate() + delta * 7);
     setWeekStart(d.toISOString().slice(0, 10));
-  };
-
-  // 주간 일괄 등록 (단원/차시 주제 한 줄에 평일 5일 동일 적용)
-  const [bulkUnit, setBulkUnit] = useState("");
-  const [bulkTopic, setBulkTopic] = useState("");
-  const [bulkPeriod, setBulkPeriod] = useState(1);
-
-  const handleBulkWeekly = async () => {
-    if (!classId) {
-      toast.error("학급을 먼저 선택하세요.");
-      return;
-    }
-    if (!bulkTopic.trim()) {
-      toast.error("차시 주제를 입력하세요.");
-      return;
-    }
-    await bulkAddWeekly(classId, weekDays, {
-      period: bulkPeriod,
-      unit: bulkUnit,
-      topic: bulkTopic,
-      status: "예정",
-    });
-    toast.success(`${weekDays[0]} ~ ${weekDays[4]} 평일에 차시를 일괄 등록했습니다.`);
-    setBulkUnit("");
-    setBulkTopic("");
   };
 
   return (
@@ -311,48 +285,8 @@ export default function LessonsPage() {
         })}
       </div>
 
-      {/* 주간 일괄 등록 */}
-      {classId && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">이번 주 평일 일괄 등록</CardTitle>
-            <CardDescription>
-              월~금 5일 동일한 차시를 선택한 학급에 한 번에 추가합니다. (시간표 초안용)
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-            <div className="space-y-1.5">
-              <Label>교시</Label>
-              <Input
-                type="number"
-                min={1}
-                max={7}
-                value={bulkPeriod}
-                onChange={(e) => setBulkPeriod(Number(e.target.value))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>단원</Label>
-              <Input
-                value={bulkUnit}
-                onChange={(e) => setBulkUnit(e.target.value)}
-                placeholder="예) 2단원. 문학의 갈래"
-              />
-            </div>
-            <div className="space-y-1.5 md:col-span-2">
-              <Label>차시 주제</Label>
-              <Input
-                value={bulkTopic}
-                onChange={(e) => setBulkTopic(e.target.value)}
-                placeholder="예) 시의 운율과 표현"
-              />
-            </div>
-            <div className="md:col-span-4 flex justify-end">
-              <Button onClick={handleBulkWeekly}>일괄 등록</Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* 진도 기반 주간 일괄 등록 */}
+      <WeeklyProgressFill weekDays={weekDays} />
 
       {/* 차시 편집 다이얼로그 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
