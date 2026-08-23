@@ -56,6 +56,19 @@ export interface Lesson {
   homework?: string;       // 과제
   status: LessonStatus;
   reflection?: string;     // 수업 후 성찰
+  /** 진도 순서(Curriculum) 기반 일괄 등록으로 생성된 수업임을 표시하는 그룹 키.
+   *  값이 있으면 해당 학급의 진도 위치 계산에 포함된다. (예: '1-국어') */
+  curriculumKey?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 진도 순서: 같은 학년·교과를 나가는 여러 반이 공유하는 차시의 정해진 나열.
+ *  각 반은 이 목록을 자기 진도 위치부터 하나씩 소비한다. */
+export interface Curriculum {
+  id: string;              // = key (예: '1-국어')
+  name: string;            // 표시명 (예: '1학년 국어')
+  items: { unit: string; topic: string }[];
   createdAt: number;
   updatedAt: number;
 }

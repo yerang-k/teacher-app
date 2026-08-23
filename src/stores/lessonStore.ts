@@ -17,11 +17,9 @@ interface LessonState {
   removeLesson: (id: string) => Promise<void>;
   setStatus: (id: string, status: LessonStatus) => Promise<void>;
 
-  /** 한 주차 일괄 생성 */
-  bulkAddWeekly: (
-    classId: string,
-    dates: string[],
-    template: Omit<Lesson, 'id' | 'classId' | 'date' | 'createdAt' | 'updatedAt'>
+  /** 여러 차시를 한 번에 생성 (진도 일괄 등록용) */
+  bulkAdd: (
+    inputs: Omit<Lesson, 'id' | 'createdAt' | 'updatedAt'>[]
   ) => Promise<void>;
 }
 
@@ -104,11 +102,9 @@ export const useLessonStore = create<LessonState>((set, get) => ({
     await get().updateLesson(id, { status });
   },
 
-  async bulkAddWeekly(classId, dates, template) {
-    const items: Lesson[] = dates.map((date) => ({
-      ...template,
-      classId,
-      date,
+  async bulkAdd(inputs) {
+    const items: Lesson[] = inputs.map((input) => ({
+      ...input,
       id: uid(),
       createdAt: now(),
       updatedAt: now(),
