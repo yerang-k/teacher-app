@@ -22,55 +22,44 @@ import {
   useClassStore,
   useLessonStore,
   useTaskStore,
-  useAttendanceStore,
-  useBehaviorStore,
-  useReportStore,
   useSettingsStore,
   useTimetableStore,
 } from "@/stores";
 import { todayKey } from "@/lib/dateUtils";
 import { db } from "@/db";
-import type { AttendanceRecord, BehaviorNote, Lesson, TimetableSlot } from "@/types";
+import type { AttendanceRecord, Lesson, TimetableSlot } from "@/types";
 export default function Home() {
   const settings = useSettingsStore((s) => s.settings);
   const classes = useClassStore((s) => s.classes);
   const students = useClassStore((s) => s.students);
 
-  const tasks = useTaskStore((s) => s.tasks);
   const loadTasks = useTaskStore((s) => s.loadAll);
   const overdue = useTaskStore((s) => s.overdue());
   const upcoming = useTaskStore((s) => s.upcoming(7));
-
-  const reports = useReportStore((s) => s.reports);
-  const loadReports = useReportStore((s) => s.loadAll);
 
   const today = todayKey();
   const slots = useTimetableStore((s) => s.slots);
   const loadByTerm = useTimetableStore((s) => s.loadByTerm);
 
-  // 오늘 수업 / 오늘 출결 / 최근 행동기록은 DB에서 직접 가져옴
+  // 오늘 수업 / 오늘 출결은 DB에서 직접 가져옴
   const [todayLessons, setTodayLessons] = useState<Lesson[]>([]);
   const [todayAttendance, setTodayAttendance] = useState<AttendanceRecord[]>([]);
-  const [recentNotes, setRecentNotes] = useState<BehaviorNote[]>([]);
 
   useEffect(() => {
     loadTasks();
-    loadReports();
     loadByTerm(settings.currentYear, settings.currentSemester);
-  }, [loadTasks, loadReports, loadByTerm, settings.currentYear, settings.currentSemester]);
+  }, [loadTasks, loadByTerm, settings.currentYear, settings.currentSemester]);
 
   useEffect(() => {
     (async () => {
-      const [lessons, attendance, notes] = await Promise.all([
+      const [lessons, attendance] = await Promise.all([
         db.lessons.where("date").equals(today).toArray(),
         db.attendance.where("date").equals(today).toArray(),
-        db.behaviorNotes.orderBy("date").reverse().limit(5).toArray(),
       ]);
       setTodayLessons(
         lessons.sort((a, b) => a.period - b.period)
       );
       setTodayAttendance(attendance);
-      setRecentNotes(notes);
     })();
   }, [today]);
 
@@ -89,23 +78,6 @@ export default function Home() {
   );
   const attendancePending =
     homeroom && homeroomAttendance.length === 0 && homeroomStudents.length > 0;
-  const absenceToday = homeroomAttendance.filter(
-    (r) =>
-      r.status !== "출석" &&
-      r.status !== "지각" &&
-      r.status !== "조퇴" &&
-      r.status !== "결과"
-  ).length;
-
-  // 업무 통계
-  const inProgressCount = tasks.filter((t) => t.status === "진행중").length;
-  const waitingCount = tasks.filter((t) => t.status === "대기").length;
-  const aiSchoolTasks = tasks.filter(
-    (t) => t.category === "AI디지털선도학교" && t.status !== "완료"
-  );
-  const infoTasks = tasks.filter(
-    (t) => t.category === "정보부" && t.status !== "완료"
-  );
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -201,7 +173,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* 통계 카드 4종 */}
       {/* 이번 주 시간표 */}
       <Card>
         <CardHeader className="pb-2">
@@ -216,33 +187,10 @@ export default function Home() {
           <WeekTimetable slots={slots} classes={classes} />
         </CardContent>
       </Card>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
-          label="담당 학급"
-          value={classes.filter((c) => !c.archived).length}
-          sub={`학생 ${students.length}명`}
-        />
-        <StatCard
-          label="오늘 수업"
-          value={todayLessons.length}
-          sub="차시"
-        />
-        <StatCard
-          label="진행중 업무"
-          value={inProgressCount}
-          sub={`대기 ${waitingCount}건`}
-        />
-        <StatCard
-          label="오늘 결석"
-          value={absenceToday}
-          sub={homeroom ? `${homeroom.grade}-${homeroom.classNumber}` : "—"}
-          tone={absenceToday > 0 ? "text-rose-600" : ""}
-        />
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* 오늘 수업 */}
-        <Card className="lg:col-span-2">
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">오늘 수업</CardTitle>
             <CardDescription>
@@ -317,154 +265,10 @@ export default function Home() {
           </CardContent>
         </Card>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* AI디지털 선도학교 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base text-purple-700">
-              AI디지털 선도학교 ({aiSchoolTasks.length})
-            </CardTitle>
-            <CardDescription>진행 중인 업무</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {aiSchoolTasks.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                관련 업무가 없습니다.
-              </p>
-            ) : (
-              aiSchoolTasks.slice(0, 4).map((t) => (
-                <div key={t.id} className="text-sm">
-                  <div className="font-medium">{t.title}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {t.status} · {t.priority}{t.dueDate ? ` · ${t.dueDate}` : ""}
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        {/* 정보부 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base text-indigo-700">
-              정보부 ({infoTasks.length})
-            </CardTitle>
-            <CardDescription>진행 중인 업무</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {infoTasks.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                관련 업무가 없습니다.
-              </p>
-            ) : (
-              infoTasks.slice(0, 4).map((t) => (
-                <div key={t.id} className="text-sm">
-                  <div className="font-medium">{t.title}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {t.status} · {t.priority}{t.dueDate ? ` · ${t.dueDate}` : ""}
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* 최근 행동 기록 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">최근 행동 관찰</CardTitle>
-            <CardDescription>최근 입력된 5건</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {recentNotes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                기록된 내용이 없습니다.
-              </p>
-            ) : (
-              recentNotes.map((n) => {
-                const s = students.find((x) => x.id === n.studentId);
-                return (
-                  <div key={n.id} className="text-sm border-b last:border-0 pb-2">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-xs">
-                        {n.category}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {n.date}
-                        {s ? ` · ${s.name}` : ""}
-                      </span>
-                    </div>
-                    <p className="mt-1 line-clamp-2">{n.content}</p>
-                  </div>
-                );
-              })
-            )}
-            <Link href="/behavior">
-              <Button variant="ghost" size="sm" className="w-full">
-                행동 기록 더 보기 →
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-
-        {/* 최근 AI 보고서 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">최근 AI 보고서</CardTitle>
-            <CardDescription>최근 생성한 5건</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {reports.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                생성된 보고서가 없습니다.
-              </p>
-            ) : (
-              reports.slice(0, 5).map((r) => (
-                <div key={r.id} className="text-sm border-b last:border-0 pb-2">
-                  <div className="font-medium line-clamp-1">{r.title}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {new Date(r.createdAt).toLocaleDateString("ko-KR")} · {r.type}
-                  </div>
-                </div>
-              ))
-            )}
-            <Link href="/ai-report">
-              <Button variant="ghost" size="sm" className="w-full">
-                AI 보고서 만들기 →
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  sub,
-  tone,
-}: {
-  label: string;
-  value: number | string;
-  sub?: string;
-  tone?: string;
-}) {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="text-xs text-muted-foreground">{label}</div>
-        <div className={`text-3xl font-bold ${tone ?? ""}`}>{value}</div>
-        {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
-      </CardContent>
-    </Card>
-  );
-}
 function dateOfWeek(dayOfWeek: 1 | 2 | 3 | 4 | 5): string {
   const today = new Date();
   const todayDay = today.getDay() === 0 ? 7 : today.getDay();
