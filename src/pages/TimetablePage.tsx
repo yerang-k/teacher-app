@@ -35,7 +35,7 @@ import {
   useAttendanceStore,
   useSettingsStore,
 } from "@/stores";
-import { todayKey, toDateKey } from "@/lib/dateUtils";
+import { todayKey, toDateKey, weekdaysOfThisWeek } from "@/lib/dateUtils";
 import type {
   Semester,
   AttendanceStatus,
@@ -68,15 +68,15 @@ const STATUS_OPTIONS: AttendanceStatus[] = [
 
 const LESSON_STATUS_OPTIONS: LessonStatus[] = ["예정", "진행중", "완료", "취소"];
 
-function dateOfThisWeek(dayOfWeek: 1 | 2 | 3 | 4 | 5): string {
-  const today = new Date();
-  const todayDay = today.getDay() === 0 ? 7 : today.getDay();
-  const diff = dayOfWeek - todayDay;
-  const target = new Date(today);
-  target.setDate(today.getDate() + diff);
-  // toISOString()은 UTC 기준이라 한국(UTC+9) 자정~오전9시 사이에 날짜가 하루 밀림
-  // toDateKey()는 로컬 날짜를 그대로 사용하므로 안전
-  return toDateKey(target);
+/** YYYY-MM-DD 에 n일 더하기 (로컬 기준) */
+function addDays(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return toDateKey(new Date(y, m - 1, d + n));
+}
+
+/** 월요일(weekMonday) 기준 요일(1~5)의 날짜 */
+function dateOfWeek(weekMonday: string, dayOfWeek: 1 | 2 | 3 | 4 | 5): string {
+  return addDays(weekMonday, dayOfWeek - 1);
 }
 
 export default function TimetablePage() {
@@ -92,6 +92,7 @@ export default function TimetablePage() {
   const [year, setYear] = useState<number>(settings.currentYear);
   const [semester, setSemester] = useState<Semester>(settings.currentSemester);
   const [editMode, setEditMode] = useState(false);
+  const [weekMonday, setWeekMonday] = useState<string>(() => weekdaysOfThisWeek()[0]);
   const [selected, setSelected] = useState<{
     day: 1 | 2 | 3 | 4 | 5;
     period: number;
@@ -101,10 +102,13 @@ export default function TimetablePage() {
     loadByTerm(year, semester);
   }, [year, semester, loadByTerm]);
 
+  const shiftWeek = (delta: number) => setWeekMonday((w) => addDays(w, delta * 7));
+
   const slotAt = (day: 1 | 2 | 3 | 4 | 5, period: number) =>
     slots.find((s) => s.dayOfWeek === day && s.period === period);
 
   const selectedSlot = selected ? slotAt(selected.day, selected.period) : null;
+  const selectedDate = selected ? dateOfWeek(weekMonday, selected.day) : null;
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">
@@ -152,16 +156,58 @@ export default function TimetablePage() {
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
         <Card>
           <CardContent className="p-3">
+            {/* 주 이동 */}
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <Button variant="outline" size="sm" onClick={() => shiftWeek(-1)}>
+                ← 지난주
+              </Button>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">
+                  {new Date(weekMonday + "T00:00:00").toLocaleDateString("ko-KR", {
+                    month: "long",
+                    day: "numeric",
+                  })}{" "}
+                  ~{" "}
+                  {new Date(dateOfWeek(weekMonday, 5) + "T00:00:00").toLocaleDateString("ko-KR", {
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setWeekMonday(weekdaysOfThisWeek()[0])}
+                >
+                  이번 주
+                </Button>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => shiftWeek(1)}>
+                다음주 →
+              </Button>
+            </div>
+
             <div className="grid grid-cols-[44px_repeat(5,1fr)] gap-1">
               <div className="text-xs text-center text-muted-foreground py-2"></div>
-              {DAYS.map((d) => (
-                <div
-                  key={d.value}
-                  className="text-xs text-center font-semibold py-2 bg-muted/40 rounded"
-                >
-                  {d.label}
-                </div>
-              ))}
+              {DAYS.map((d) => {
+                const date = dateOfWeek(weekMonday, d.value);
+                const isToday = date === todayKey();
+                return (
+                  <div
+                    key={d.value}
+                    className={`text-center py-1.5 rounded ${
+                      isToday ? "bg-primary text-primary-foreground" : "bg-muted/40"
+                    }`}
+                  >
+                    <div className="text-xs font-semibold">{d.label}</div>
+                    <div className={`text-[10px] ${isToday ? "opacity-90" : "text-muted-foreground"}`}>
+                      {new Date(date + "T00:00:00").toLocaleDateString("ko-KR", {
+                        month: "numeric",
+                        day: "numeric",
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
 
               {PERIODS.map((period) => (
                 <Row
@@ -205,10 +251,11 @@ export default function TimetablePage() {
             </Card>
           )}
 
-          {selected && (
+          {selected && selectedDate && (
             <SidePanel
               day={selected.day}
               period={selected.period}
+              date={selectedDate}
               slot={selectedSlot}
               year={year}
               semester={semester}
@@ -355,6 +402,7 @@ function Row({
 function SidePanel({
   day,
   period,
+  date,
   slot,
   classes,
   getStudentsByClass,
@@ -362,6 +410,7 @@ function SidePanel({
 }: {
   day: 1 | 2 | 3 | 4 | 5;
   period: number;
+  date: string;
   slot: TimetableSlot | null | undefined;
   year: number;
   semester: Semester;
@@ -373,7 +422,6 @@ function SidePanel({
 }) {
   const klass = slot ? classes.find((c) => c.id === slot.classId) : null;
   const dayLabel = DAYS.find((d) => d.value === day)?.label ?? "";
-  const date = dateOfThisWeek(day);
   const [classProgressOpen, setClassProgressOpen] = useState(false);
 
   return (
