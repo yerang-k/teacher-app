@@ -59,6 +59,16 @@ function itemsToText(items: { unit: string; topic: string }[]): string {
 /** 요일(1~5) 목록 — 주말 제외 */
 const WEEKDAY_OPTIONS = [1, 2, 3, 4, 5];
 
+/** YYYY-MM-DD 에 n일 더하기 (로컬 기준) */
+function addDays(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + n);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
 export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] }) {
   const classes = useClassStore((s) => s.classes);
   const slots = useTimetableStore((s) => s.slots);
@@ -94,6 +104,18 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
   const [existing, setExisting] = useState<Set<string>>(new Set());
   const [refreshTick, setRefreshTick] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [weekCount, setWeekCount] = useState(1);
+
+  // 선택한 주부터 weekCount주 만큼의 평일(월~금) 날짜. 진도가 남으면 다음 주로 이어 채운다.
+  const allDays = useMemo(() => {
+    if (weekDays.length === 0) return [];
+    const base = weekDays[0];
+    const out: string[] = [];
+    for (let w = 0; w < weekCount; w++) {
+      for (let i = 0; i < 5; i++) out.push(addDays(base, w * 7 + i));
+    }
+    return out;
+  }, [weekDays, weekCount]);
 
   useEffect(() => {
     loadCurricula();
@@ -126,7 +148,7 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!groupKey || groupClasses.length === 0 || weekDays.length === 0) {
+      if (!groupKey || groupClasses.length === 0 || allDays.length === 0) {
         setProgressByClass({});
         setExisting(new Set());
         return;
@@ -144,7 +166,7 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
       // 이번 주 이미 등록된 칸 (date|classId|period)
       const weekRows = await db.lessons
         .where("date")
-        .between(weekDays[0], weekDays[weekDays.length - 1], true, true)
+        .between(allDays[0], allDays[allDays.length - 1], true, true)
         .toArray();
       const occ = new Set<string>();
       for (const l of weekRows) {
@@ -161,7 +183,7 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupKey, groupClasses, weekDays, refreshTick]);
+  }, [groupKey, groupClasses, allDays, refreshTick]);
 
   const weekdayOf = (date: string) => {
     const dow = new Date(date + "T00:00:00").getDay();
@@ -176,7 +198,7 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
     const classLabels: Record<string, string> = {};
     for (const c of groupClasses) classLabels[c.id] = classLabel(c);
     return planWeek({
-      weekDays,
+      weekDays: allDays,
       dayApplied,
       slots,
       classLabels,
@@ -187,7 +209,7 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
       weekdayOf,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekDays, dayApplied, slots, groupClasses, existing, skip, items, progressByClass]);
+  }, [allDays, dayApplied, slots, groupClasses, existing, skip, items, progressByClass]);
 
   const assignRows = useMemo(
     () => blocks.flatMap((b) => b.rows).filter((r) => r.status === "assign"),
@@ -197,6 +219,12 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
     () => blocks.some((b) => b.rows.length > 0),
     [blocks]
   );
+  // 미리보기를 주 단위(5일)로 묶기
+  const weeks = useMemo(() => {
+    const out: DayBlock[][] = [];
+    for (let i = 0; i < blocks.length; i += 5) out.push(blocks.slice(i, i + 5));
+    return out;
+  }, [blocks]);
 
   const handleSaveCurriculum = async () => {
     if (!groupKey) return;
@@ -291,68 +319,104 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
           </div>
         </div>
 
-        {/* 2~3단계: 미리보기 (요일 교체 / 쉬는 날) */}
+        {/* 2~3단계: 미리보기 (요일 교체 / 쉬는 날 / 여러 주 채우기) */}
         <div className="space-y-2">
-          <Label>미리보기 · 주간 배치</Label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Label>미리보기 · 주간 배치</Label>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">채울 주 수</Label>
+              <Select value={String(weekCount)} onValueChange={(v) => setWeekCount(Number(v))}>
+                <SelectTrigger className="h-8 w-[90px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <SelectItem key={n} value={String(n)} className="text-xs">
+                      {n}주
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            선택한 주에 진도가 다 안 들어가면 <b>채울 주 수</b>를 늘리세요. 남은 차시가 다음 주 시간표로 이어집니다.
+          </p>
           {items.length === 0 ? (
             <p className="text-sm text-muted-foreground border rounded p-3">
               진도 순서를 먼저 입력하세요.
             </p>
           ) : !hasAnySlot ? (
             <p className="text-sm text-muted-foreground border rounded p-3">
-              이 그룹의 시간표가 이번 주에 없습니다. 시간표 탭에서 먼저 시간표를 등록해주세요.
+              이 그룹의 시간표가 없습니다. 시간표 탭에서 먼저 시간표를 등록해주세요.
             </p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-              {blocks.map((b) => (
-                <div key={b.date} className="border rounded p-2 space-y-2">
-                  <div className="space-y-1">
-                    <div className="text-xs font-semibold">
-                      {new Date(b.date + "T00:00:00").toLocaleDateString("ko-KR", {
+            <div className="space-y-3">
+              {weeks.map((week, wi) => (
+                <div key={wi} className="space-y-1">
+                  {weekCount > 1 && (
+                    <div className="text-xs font-semibold text-muted-foreground">
+                      {wi + 1}주차 (
+                      {new Date(week[0].date + "T00:00:00").toLocaleDateString("ko-KR", {
                         month: "short",
                         day: "numeric",
-                        weekday: "short",
                       })}
-                    </div>
-                    <Select
-                      value={String(b.appliedDay)}
-                      onValueChange={(v) =>
-                        setDayApplied((m) => ({ ...m, [b.date]: Number(v) }))
-                      }
-                    >
-                      <SelectTrigger className="h-7 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {WEEKDAY_OPTIONS.map((d) => (
-                          <SelectItem key={d} value={String(d)} className="text-xs">
-                            {DOW_LABEL[d]}요일 시간표
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="0" className="text-xs">
-                          휴업 (건너뛰기)
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {b.appliedDay === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2">휴업일</p>
-                  ) : b.rows.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2">수업 없음</p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {b.rows.map((r) => (
-                        <ProgressRowView
-                          key={r.slotKey}
-                          row={r}
-                          onToggle={() =>
-                            setSkip((m) => ({ ...m, [r.slotKey]: !m[r.slotKey] }))
-                          }
-                        />
-                      ))}
+                      ~)
                     </div>
                   )}
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                    {week.map((b) => (
+                      <div key={b.date} className="border rounded p-2 space-y-2">
+                        <div className="space-y-1">
+                          <div className="text-xs font-semibold">
+                            {new Date(b.date + "T00:00:00").toLocaleDateString("ko-KR", {
+                              month: "short",
+                              day: "numeric",
+                              weekday: "short",
+                            })}
+                          </div>
+                          <Select
+                            value={String(b.appliedDay)}
+                            onValueChange={(v) =>
+                              setDayApplied((m) => ({ ...m, [b.date]: Number(v) }))
+                            }
+                          >
+                            <SelectTrigger className="h-7 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {WEEKDAY_OPTIONS.map((d) => (
+                                <SelectItem key={d} value={String(d)} className="text-xs">
+                                  {DOW_LABEL[d]}요일 시간표
+                                </SelectItem>
+                              ))}
+                              <SelectItem value="0" className="text-xs">
+                                휴업 (건너뛰기)
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {b.appliedDay === 0 ? (
+                          <p className="text-xs text-muted-foreground py-2">휴업일</p>
+                        ) : b.rows.length === 0 ? (
+                          <p className="text-xs text-muted-foreground py-2">수업 없음</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {b.rows.map((r) => (
+                              <ProgressRowView
+                                key={r.slotKey}
+                                row={r}
+                                onToggle={() =>
+                                  setSkip((m) => ({ ...m, [r.slotKey]: !m[r.slotKey] }))
+                                }
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>

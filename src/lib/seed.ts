@@ -4,8 +4,17 @@ import type { SchoolClass, Student, SchoolTask } from '@/types';
 /**
  * 앱 첫 실행 시 호출하면 학급/학생/업무 시드 데이터를 생성합니다.
  * 이미 데이터가 있으면 아무 것도 하지 않습니다.
+ *
+ * StrictMode(개발) 이중 실행 등으로 동시에 두 번 불려도 시드가 중복
+ * 생성되지 않도록 단일 실행(single-flight)으로 감쌉니다.
  */
-export async function seedIfEmpty() {
+let seeding: Promise<boolean> | null = null;
+export function seedIfEmpty(): Promise<boolean> {
+  if (!seeding) seeding = doSeed();
+  return seeding;
+}
+
+async function doSeed(): Promise<boolean> {
   const classCount = await db.classes.count();
   if (classCount > 0) return false;
 
