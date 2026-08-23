@@ -59,6 +59,8 @@ export interface Lesson {
   /** 진도 순서(Curriculum) 기반 일괄 등록으로 생성된 수업임을 표시하는 그룹 키.
    *  값이 있으면 해당 학급의 진도 위치 계산에 포함된다. (예: '1-국어') */
   curriculumKey?: string;
+  /** 한 번의 '진도 나가기' 등록으로 생성된 묶음 식별자. 잘못 등록 시 묶음 되돌리기(일괄 삭제)에 사용. */
+  batchId?: string;
   createdAt: number;
   updatedAt: number;
 }

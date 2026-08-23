@@ -21,6 +21,9 @@ interface LessonState {
   bulkAdd: (
     inputs: Omit<Lesson, 'id' | 'createdAt' | 'updatedAt'>[]
   ) => Promise<void>;
+
+  /** 여러 차시를 한 번에 삭제 (일괄 등록 되돌리기용) */
+  bulkRemove: (ids: string[]) => Promise<void>;
 }
 
 export const useLessonStore = create<LessonState>((set, get) => ({
@@ -111,5 +114,11 @@ export const useLessonStore = create<LessonState>((set, get) => ({
     }));
     await db.lessons.bulkAdd(items);
     set((s) => ({ lessons: [...s.lessons, ...items] }));
+  },
+
+  async bulkRemove(ids) {
+    await db.lessons.bulkDelete(ids);
+    const idSet = new Set(ids);
+    set((s) => ({ lessons: s.lessons.filter((l) => !idSet.has(l.id)) }));
   },
 }));

@@ -26,7 +26,7 @@ import {
   useSettingsStore,
   useCurriculumStore,
 } from "@/stores";
-import { db } from "@/db";
+import { db, uid } from "@/db";
 import type { SchoolClass } from "@/types";
 import { planWeek, type DayBlock, type PreviewRow } from "@/lib/weekPlan";
 
@@ -78,6 +78,7 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
   const loadCurricula = useCurriculumStore((s) => s.loadAll);
   const saveCurriculum = useCurriculumStore((s) => s.save);
   const bulkAddLessons = useLessonStore((s) => s.bulkAdd);
+  const bulkRemoveLessons = useLessonStore((s) => s.bulkRemove);
 
   const activeClasses = useMemo(
     () => classes.filter((c) => !c.archived),
@@ -102,6 +103,9 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
   const [skip, setSkip] = useState<Record<string, boolean>>({});
   const [progressByClass, setProgressByClass] = useState<Record<string, number>>({});
   const [existing, setExisting] = useState<Set<string>>(new Set());
+  const [batches, setBatches] = useState<
+    { batchId: string; ids: string[]; count: number; minDate: string; maxDate: string; createdAt: number }[]
+  >([]);
   const [refreshTick, setRefreshTick] = useState(0);
   const [saving, setSaving] = useState(false);
   const [weekCount, setWeekCount] = useState(1);
@@ -151,18 +155,47 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
       if (!groupKey || groupClasses.length === 0 || allDays.length === 0) {
         setProgressByClass({});
         setExisting(new Set());
+        setBatches([]);
         return;
       }
       // 진도 위치: 그 반의 curriculumKey 붙은 (취소 아닌) 수업 수
+      // + 되돌리기용 배치(batchId) 수집
       const progress: Record<string, number> = {};
+      const batchMap = new Map<
+        string,
+        { batchId: string; ids: string[]; count: number; minDate: string; maxDate: string; createdAt: number }
+      >();
       await Promise.all(
         groupClasses.map(async (c) => {
           const rows = await db.lessons.where("classId").equals(c.id).toArray();
           progress[c.id] = rows.filter(
             (l) => l.curriculumKey === groupKey && l.status !== "취소"
           ).length;
+          for (const l of rows) {
+            if (l.curriculumKey !== groupKey || !l.batchId) continue;
+            const b = batchMap.get(l.batchId);
+            if (b) {
+              b.ids.push(l.id);
+              b.count += 1;
+              if (l.date < b.minDate) b.minDate = l.date;
+              if (l.date > b.maxDate) b.maxDate = l.date;
+              b.createdAt = Math.max(b.createdAt, l.createdAt);
+            } else {
+              batchMap.set(l.batchId, {
+                batchId: l.batchId,
+                ids: [l.id],
+                count: 1,
+                minDate: l.date,
+                maxDate: l.date,
+                createdAt: l.createdAt,
+              });
+            }
+          }
         })
       );
+      const batchList = [...batchMap.values()]
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 6);
       // 이번 주 이미 등록된 칸 (date|classId|period)
       const weekRows = await db.lessons
         .where("date")
@@ -177,6 +210,7 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
       if (!cancelled) {
         setProgressByClass(progress);
         setExisting(occ);
+        setBatches(batchList);
       }
     })();
     return () => {
@@ -243,6 +277,7 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
       // 확정 전 진도 순서도 함께 저장 (편집만 하고 저장 안 한 경우 대비)
       const g = groups.find((x) => x.key === groupKey);
       await saveCurriculum(groupKey, g?.name ?? groupKey, items);
+      const batchId = uid();
       await bulkAddLessons(
         assignRows.map((r) => ({
           classId: r.classId,
@@ -252,6 +287,7 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
           topic: r.item!.topic,
           status: "예정" as const,
           curriculumKey: groupKey,
+          batchId,
         }))
       );
       toast.success(`${assignRows.length}개 차시를 등록했습니다.`);
@@ -263,6 +299,25 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
       setSaving(false);
     }
   };
+
+  const handleUndo = async (batch: (typeof batches)[number]) => {
+    if (
+      !confirm(
+        `이 일괄 등록(${batch.count}개 차시)을 모두 삭제할까요? 되돌릴 수 없습니다.`
+      )
+    )
+      return;
+    try {
+      await bulkRemoveLessons(batch.ids);
+      toast.success(`${batch.count}개 차시를 삭제했습니다.`);
+      setRefreshTick((t) => t + 1);
+    } catch (e) {
+      toast.error("삭제 실패: " + (e as Error).message);
+    }
+  };
+
+  const fmtDate = (d: string) =>
+    new Date(d + "T00:00:00").toLocaleDateString("ko-KR", { month: "short", day: "numeric" });
 
   return (
     <Card>
@@ -432,6 +487,39 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
             {saving ? "등록 중…" : "이대로 등록"}
           </Button>
         </div>
+
+        {/* 되돌리기: 최근 일괄 등록 묶음 삭제 */}
+        {batches.length > 0 && (
+          <div className="space-y-2 border-t pt-3">
+            <Label className="text-xs text-muted-foreground">
+              최근 일괄 등록 · 잘못 등록했으면 묶음째 되돌리기
+            </Label>
+            <div className="space-y-1.5">
+              {batches.map((b) => (
+                <div
+                  key={b.batchId}
+                  className="flex items-center justify-between text-xs border rounded p-2"
+                >
+                  <span>
+                    <span className="font-medium">{b.count}개 차시</span>{" "}
+                    <span className="text-muted-foreground">
+                      · {fmtDate(b.minDate)}
+                      {b.maxDate !== b.minDate ? ` ~ ${fmtDate(b.maxDate)}` : ""} 등록
+                    </span>
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-rose-600 hover:text-rose-700"
+                    onClick={() => handleUndo(b)}
+                  >
+                    되돌리기
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
