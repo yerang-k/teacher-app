@@ -41,8 +41,9 @@ export default function Home() {
   const slots = useTimetableStore((s) => s.slots);
   const loadByTerm = useTimetableStore((s) => s.loadByTerm);
 
-  // 오늘 수업 / 오늘 출결은 DB에서 직접 가져옴
-  const [todayLessons, setTodayLessons] = useState<Lesson[]>([]);
+  // 수업 카드는 날짜 이동이 가능(viewDate). 출결 알림은 실제 오늘 기준 유지.
+  const [viewDate, setViewDate] = useState(today);
+  const [viewLessons, setViewLessons] = useState<Lesson[]>([]);
   const [todayAttendance, setTodayAttendance] = useState<AttendanceRecord[]>([]);
 
   useEffect(() => {
@@ -50,18 +51,19 @@ export default function Home() {
     loadByTerm(settings.currentYear, settings.currentSemester);
   }, [loadTasks, loadByTerm, settings.currentYear, settings.currentSemester]);
 
+  // 출결 알림용 (오늘 고정)
   useEffect(() => {
-    (async () => {
-      const [lessons, attendance] = await Promise.all([
-        db.lessons.where("date").equals(today).toArray(),
-        db.attendance.where("date").equals(today).toArray(),
-      ]);
-      setTodayLessons(
-        lessons.sort((a, b) => a.period - b.period)
-      );
-      setTodayAttendance(attendance);
-    })();
+    db.attendance.where("date").equals(today).toArray().then(setTodayAttendance);
   }, [today]);
+
+  // 수업 카드용 (viewDate 이동)
+  useEffect(() => {
+    db.lessons
+      .where("date")
+      .equals(viewDate)
+      .toArray()
+      .then((rows) => setViewLessons(rows.sort((a, b) => a.period - b.period)));
+  }, [viewDate]);
 
   // 담임 학급 출결 입력 여부 체크
   const homeroom = classes.find((c) => c.homeroom && !c.archived);
@@ -192,21 +194,56 @@ export default function Home() {
         {/* 오늘 수업 */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">오늘 수업</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">
+                {viewDate === today ? "오늘 수업" : "수업"}
+              </CardTitle>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2"
+                  onClick={() => setViewDate((d) => addDay(d, -1))}
+                >
+                  ←
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setViewDate(today)}
+                >
+                  오늘
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2"
+                  onClick={() => setViewDate((d) => addDay(d, 1))}
+                >
+                  →
+                </Button>
+              </div>
+            </div>
             <CardDescription>
-              {today} · {todayLessons.length}차시
+              {new Date(viewDate + "T00:00:00").toLocaleDateString("ko-KR", {
+                month: "long",
+                day: "numeric",
+                weekday: "short",
+              })}{" "}
+              · {viewLessons.length}차시
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            {todayLessons.length === 0 ? (
+            {viewLessons.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                오늘 등록된 수업이 없습니다.{" "}
+                등록된 수업이 없습니다.{" "}
                 <Link href="/lessons">
                   <span className="underline cursor-pointer">수업 등록하기</span>
                 </Link>
               </p>
             ) : (
-              todayLessons.map((l) => {
+              viewLessons.map((l) => {
                 const k = classes.find((c) => c.id === l.classId);
                 return (
                   <div
@@ -267,6 +304,15 @@ export default function Home() {
       </div>
     </div>
   );
+}
+
+/** YYYY-MM-DD 에 n일 더하기 (로컬 기준) */
+function addDay(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + n);
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${dt.getFullYear()}-${mm}-${dd}`;
 }
 
 function dateOfWeek(dayOfWeek: 1 | 2 | 3 | 4 | 5): string {
