@@ -2,6 +2,16 @@ import { create } from 'zustand';
 import { db, now, uid } from '@/db';
 import type { SchoolClass, Student } from '@/types';
 
+/** 학년 → 반 → 과목(가나다) 순 정렬 */
+function sortClasses(list: SchoolClass[]): SchoolClass[] {
+  return [...list].sort(
+    (a, b) =>
+      a.grade - b.grade ||
+      a.classNumber - b.classNumber ||
+      (a.subject ?? '').localeCompare(b.subject ?? '', 'ko')
+  );
+}
+
 interface ClassState {
   classes: SchoolClass[];
   students: Student[];
@@ -44,10 +54,11 @@ export const useClassStore = create<ClassState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const [classes, students] = await Promise.all([
-        db.classes.orderBy('classNumber').toArray(),
+        db.classes.toArray(),
         db.students.toArray(),
       ]);
-      set({ classes, students, loading: false });
+      // 학년 → 반 → 과목(가나다) 순 정렬 (조회·드롭다운 전체에 적용)
+      set({ classes: sortClasses(classes), students, loading: false });
     } catch (e) {
       set({ error: (e as Error).message, loading: false });
     }
@@ -75,7 +86,7 @@ export const useClassStore = create<ClassState>((set, get) => ({
       updatedAt: now(),
     };
     await db.classes.add(item);
-    set((s) => ({ classes: [...s.classes, item] }));
+    set((s) => ({ classes: sortClasses([...s.classes, item]) }));
     return item.id;
   },
 
@@ -83,7 +94,9 @@ export const useClassStore = create<ClassState>((set, get) => ({
     const updated = { ...patch, updatedAt: now() };
     await db.classes.update(id, updated);
     set((s) => ({
-      classes: s.classes.map((c) => (c.id === id ? { ...c, ...updated } : c)),
+      classes: sortClasses(
+        s.classes.map((c) => (c.id === id ? { ...c, ...updated } : c))
+      ),
     }));
   },
 
