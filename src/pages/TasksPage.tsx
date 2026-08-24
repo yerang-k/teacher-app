@@ -94,6 +94,21 @@ function dInfo(dueDate: string | undefined, done: boolean) {
   return { label: `D-${d}`, cls: "bg-slate-100 text-slate-600" };
 }
 
+/** 이 업무가 언제 요청/등록됐는지 (메신저 수신일 우선, 없으면 등록일) → 'M/D' */
+function requestedLabel(t: SchoolTask): string {
+  let iso = "";
+  if (t.receivedAt) {
+    iso = t.receivedAt.slice(0, 10);
+  } else if (t.createdAt) {
+    const d = new Date(t.createdAt);
+    iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate()
+    ).padStart(2, "0")}`;
+  }
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${Number(m[2])}/${Number(m[3])}` : "";
+}
+
 function groupOf(t: SchoolTask): GroupKey {
   if (t.status === "완료") return "완료";
   if (!t.dueDate) return "기한 없음";
@@ -269,6 +284,16 @@ export default function TasksPage() {
             )}
           </div>
         </button>
+
+        {/* 요청일 (마감일이 없어도 언제 온 업무인지 오른쪽 끝에 표시) */}
+        {requestedLabel(t) && (
+          <div className="shrink-0 text-right leading-tight">
+            <div className="text-[10px] text-muted-foreground">요청</div>
+            <div className="text-xs text-muted-foreground whitespace-nowrap">
+              {requestedLabel(t)}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
