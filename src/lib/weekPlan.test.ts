@@ -121,4 +121,36 @@ const assigned = (blocks: ReturnType<typeof planWeek>) =>
   );
 }
 
+// 8) 진도 순서 부족 해결 전략: repeat
+{
+  const a = planWeek({ ...base, items: items.slice(0, 2), shortageStrategy: "repeat" });
+  const rows = a.flatMap((b) => b.rows);
+  assert.strictEqual(
+    rows.filter((r) => r.status === "assign").length,
+    3,
+    "repeat 전략 시 모든 칸 배치"
+  );
+  assert.deepStrictEqual(
+    rows.filter((r) => r.status === "assign").map((r) => r.item!.topic),
+    ["차시A", "차시B", "차시A"],
+    "repeat 전략 시 인덱스 순환 배치"
+  );
+}
+
+// 9) 진도 순서 부족 해결 전략: empty
+{
+  const a = planWeek({ ...base, items: items.slice(0, 2), shortageStrategy: "empty" });
+  const rows = a.flatMap((b) => b.rows);
+  assert.strictEqual(
+    rows.filter((r) => r.status === "assign").length,
+    3,
+    "empty 전략 시 모든 칸 배치"
+  );
+  assert.deepStrictEqual(
+    rows.filter((r) => r.status === "assign").map((r) => r.item!.topic),
+    ["차시A", "차시B", ""],
+    "empty 전략 시 부족분은 빈 문자열 배정"
+  );
+}
+
 console.log("weekPlan: 모든 검증 통과 ✅");

@@ -12,8 +12,11 @@ interface CurriculumState {
   save: (
     key: string,
     name: string,
-    items: { unit: string; topic: string }[]
+    items: { unit: string; topic: string }[],
+    classIds?: string[]
   ) => Promise<void>;
+  /** 진도 그룹 삭제 */
+  delete: (key: string) => Promise<void>;
 }
 
 export const useCurriculumStore = create<CurriculumState>((set, get) => ({
@@ -29,16 +32,23 @@ export const useCurriculumStore = create<CurriculumState>((set, get) => ({
     return get().curricula.find((c) => c.id === key);
   },
 
-  async save(key, name, items) {
+  async save(key, name, items, classIds) {
     const existing = get().curricula.find((c) => c.id === key);
     const item: Curriculum = existing
-      ? { ...existing, name, items, updatedAt: now() }
-      : { id: key, name, items, createdAt: now(), updatedAt: now() };
+      ? { ...existing, name, items, classIds: classIds ?? existing.classIds, updatedAt: now() }
+      : { id: key, name, items, classIds, createdAt: now(), updatedAt: now() };
     await db.curricula.put(item);
     set((s) => ({
       curricula: existing
         ? s.curricula.map((c) => (c.id === key ? item : c))
         : [...s.curricula, item],
+    }));
+  },
+
+  async delete(key) {
+    await db.curricula.delete(key);
+    set((s) => ({
+      curricula: s.curricula.filter((c) => c.id !== key),
     }));
   },
 }));

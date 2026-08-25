@@ -71,6 +71,7 @@ export interface Curriculum {
   id: string;              // = key (예: '1-국어')
   name: string;            // 표시명 (예: '1학년 국어')
   items: { unit: string; topic: string }[];
+  classIds?: string[];     // 이 진도 그룹에 속한 학급 ID 목록
   createdAt: number;
   updatedAt: number;
 }

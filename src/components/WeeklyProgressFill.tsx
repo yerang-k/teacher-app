@@ -18,6 +18,16 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 import {
   useClassStore,
@@ -85,18 +95,6 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
     [classes]
   );
 
-  // 진도 그룹 목록 (학년·교과별)
-  const groups = useMemo(() => {
-    const map = new Map<string, { key: string; name: string; count: number }>();
-    for (const c of activeClasses) {
-      const key = groupKeyOf(c);
-      const g = map.get(key);
-      if (g) g.count += 1;
-      else map.set(key, { key, name: groupNameOf(c), count: 1 });
-    }
-    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [activeClasses]);
-
   const [groupKey, setGroupKey] = useState<string>("");
   const [itemsText, setItemsText] = useState("");
   const [dayApplied, setDayApplied] = useState<Record<string, number>>({});
@@ -109,6 +107,78 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
   const [refreshTick, setRefreshTick] = useState(0);
   const [saving, setSaving] = useState(false);
   const [weekCount, setWeekCount] = useState(1);
+
+  // 신규 진도 부족 처리 전략 상태 추가
+  const [shortageStrategy, setShortageStrategy] = useState<"repeat" | "skip" | "empty">("repeat");
+
+  // 진도 그룹 관리 상태 추가
+  const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+
+  // 진도 그룹 자동 초기화 및 학급 매핑 마이그레이션
+  useEffect(() => {
+    if (!curricula || activeClasses.length === 0) return;
+
+    const initializeGroups = async () => {
+      const assignedClassIds = new Set<string>();
+      for (const cur of curricula) {
+        if (cur.classIds) {
+          cur.classIds.forEach((id) => assignedClassIds.add(id));
+        } else {
+          // 하위 호환: classIds가 없는 기존 그룹인 경우 학년-교과 키 매칭하여 업데이트
+          const matchedClasses = activeClasses.filter((c) => groupKeyOf(c) === cur.id);
+          if (matchedClasses.length > 0) {
+            matchedClasses.forEach((c) => assignedClassIds.add(c.id));
+            await saveCurriculum(cur.id, cur.name, cur.items, matchedClasses.map((c) => c.id));
+          }
+        }
+      }
+
+      // 지정되지 않은 학급 탐색 및 기본 그룹 자동 할당
+      const unassignedClasses = activeClasses.filter((c) => !assignedClassIds.has(c.id));
+      if (unassignedClasses.length > 0) {
+        const tempGroups = new Map<string, { name: string; classIds: string[] }>();
+        for (const c of unassignedClasses) {
+          const key = groupKeyOf(c);
+          const name = groupNameOf(c);
+          const g = tempGroups.get(key);
+          if (g) {
+            g.classIds.push(c.id);
+          } else {
+            tempGroups.set(key, { name, classIds: [c.id] });
+          }
+        }
+        for (const [key, val] of tempGroups.entries()) {
+          const exists = curricula.some((c) => c.id === key);
+          if (!exists) {
+            await saveCurriculum(key, val.name, [], val.classIds);
+          } else {
+            const cur = curricula.find((c) => c.id === key)!;
+            const mergedClassIds = Array.from(new Set([...(cur.classIds || []), ...val.classIds]));
+            await saveCurriculum(key, cur.name, cur.items, mergedClassIds);
+          }
+        }
+      }
+    };
+
+    initializeGroups();
+  }, [curricula, activeClasses, saveCurriculum]);
+
+  // 진도 그룹 목록 (학년·교과별 자동 생성 대신 DB curricula 기반)
+  const groups = useMemo(() => {
+    return curricula
+      .map((cur) => {
+        const count = activeClasses.filter((c) => cur.classIds?.includes(c.id)).length;
+        return {
+          key: cur.id,
+          name: cur.name,
+          count,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [curricula, activeClasses]);
 
   // 선택한 주부터 weekCount주 만큼의 평일(월~금) 날짜. 진도가 남으면 다음 주로 이어 채운다.
   const allDays = useMemo(() => {
@@ -139,10 +209,22 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
 
   const items = useMemo(() => parseItems(itemsText), [itemsText]);
 
-  const groupClasses = useMemo(
-    () => activeClasses.filter((c) => groupKeyOf(c) === groupKey),
-    [activeClasses, groupKey]
+  // 선택한 진도 그룹 정보
+  const activeCurriculum = useMemo(
+    () => curricula.find((c) => c.id === groupKey),
+    [curricula, groupKey]
   );
+
+  const groupClasses = useMemo(() => {
+    if (!activeCurriculum) return [];
+    if (activeCurriculum.classIds && activeCurriculum.classIds.length > 0) {
+      const classIdsSet = new Set(activeCurriculum.classIds);
+      return activeClasses.filter((c) => classIdsSet.has(c.id));
+    }
+    // 하위 호환
+    return activeClasses.filter((c) => groupKeyOf(c) === groupKey);
+  }, [activeClasses, activeCurriculum, groupKey]);
+
   const groupClassIds = useMemo(
     () => new Set(groupClasses.map((c) => c.id)),
     [groupClasses]
@@ -241,9 +323,10 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
       items,
       progress: progressByClass,
       weekdayOf,
+      shortageStrategy,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allDays, dayApplied, slots, groupClasses, existing, skip, items, progressByClass]);
+  }, [allDays, dayApplied, slots, groupClasses, existing, skip, items, progressByClass, shortageStrategy]);
 
   const assignRows = useMemo(
     () => blocks.flatMap((b) => b.rows).filter((r) => r.status === "assign"),
@@ -263,7 +346,7 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
   const handleSaveCurriculum = async () => {
     if (!groupKey) return;
     const g = groups.find((x) => x.key === groupKey);
-    await saveCurriculum(groupKey, g?.name ?? groupKey, items);
+    await saveCurriculum(groupKey, g?.name ?? groupKey, items, activeCurriculum?.classIds);
     toast.success("진도 순서를 저장했습니다.");
   };
 
@@ -276,7 +359,7 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
     try {
       // 확정 전 진도 순서도 함께 저장 (편집만 하고 저장 안 한 경우 대비)
       const g = groups.find((x) => x.key === groupKey);
-      await saveCurriculum(groupKey, g?.name ?? groupKey, items);
+      await saveCurriculum(groupKey, g?.name ?? groupKey, items, activeCurriculum?.classIds);
       const batchId = uid();
       await bulkAddLessons(
         assignRows.map((r) => ({
@@ -297,6 +380,116 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
       toast.error("등록 실패: " + (e as Error).message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // 진도 그룹 직접 관리 관련 핸들러들
+  const handleEditGroup = (gId: string) => {
+    const cur = curricula.find((c) => c.id === gId);
+    if (!cur) return;
+    setEditingGroupId(gId);
+    setNewGroupName(cur.name);
+    setSelectedClassIds(cur.classIds || []);
+  };
+
+  const handleSaveGroup = async () => {
+    if (!newGroupName.trim()) {
+      toast.error("그룹 이름을 입력하세요.");
+      return;
+    }
+    const targetId = editingGroupId || uid();
+    const existing = curricula.find((c) => c.id === targetId);
+    const existingItems = existing ? existing.items : [];
+    
+    await saveCurriculum(targetId, newGroupName.trim(), existingItems, selectedClassIds);
+    toast.success("진도 그룹을 저장했습니다.");
+    
+    // 신규 생성 시 생성한 그룹으로 자동 전환
+    if (!editingGroupId) {
+      setGroupKey(targetId);
+    }
+    
+    setEditingGroupId(null);
+    setNewGroupName("");
+    setSelectedClassIds([]);
+  };
+
+  const handleDeleteGroup = async (gId: string) => {
+    if (!confirm("이 진도 그룹을 삭제할까요? (진도 순서 데이터가 모두 지워집니다)")) return;
+    await useCurriculumStore.getState().delete(gId);
+    toast.success("그룹이 삭제되었습니다.");
+    if (groupKey === gId) {
+      setGroupKey("");
+    }
+  };
+
+  const handleToggleClassSelection = (cId: string) => {
+    setSelectedClassIds((prev) =>
+      prev.includes(cId) ? prev.filter((id) => id !== cId) : [...prev, cId]
+    );
+  };
+
+  // 진도 순서 생성 편의 핸들러
+  const handleGeneratePlaceholderItems = () => {
+    const countStr = prompt("몇 차시의 임시 진도를 생성할까요? (숫자만 입력)", "10");
+    if (countStr === null) return;
+    const count = parseInt(countStr, 10);
+    if (isNaN(count) || count <= 0) {
+      toast.error("올바른 숫자를 입력하세요.");
+      return;
+    }
+    const lines: string[] = [];
+    for (let i = 1; i <= count; i++) {
+      lines.push(`${i}차시`);
+    }
+    if (itemsText && !confirm("이미 입력된 진도가 있습니다. 덮어쓸까요?")) {
+      setItemsText((prev) => (prev ? prev + "\n" + lines.join("\n") : lines.join("\n")));
+    } else {
+      setItemsText(lines.join("\n"));
+    }
+  };
+
+  const handleImportFromExistingLessons = async () => {
+    if (groupClasses.length === 0) {
+      toast.error("진도 그룹에 포함된 학급이 없습니다.");
+      return;
+    }
+    if (itemsText && !confirm("이미 입력된 진도 순서가 덮어씌워집니다. 계속할까요?")) {
+      return;
+    }
+    try {
+      const allLessons: any[] = [];
+      await Promise.all(
+        groupClasses.map(async (c) => {
+          const rows = await db.lessons.where("classId").equals(c.id).toArray();
+          allLessons.push(...rows.filter((l) => l.curriculumKey === groupKey && l.status !== "취소"));
+        })
+      );
+      
+      allLessons.sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return a.period - b.period;
+      });
+
+      const seen = new Set<string>();
+      const itemsList: { unit: string; topic: string }[] = [];
+      for (const l of allLessons) {
+        const key = `${l.unit || ""}|${l.topic || ""}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          itemsList.push({ unit: l.unit || "", topic: l.topic || "" });
+        }
+      }
+
+      if (itemsList.length === 0) {
+        toast.error("가져올 수 있는 기존 수업 기록이 없습니다.");
+        return;
+      }
+
+      setItemsText(itemsToText(itemsList));
+      toast.success(`${itemsList.length}개의 차시 정보를 수업 기록에서 가져왔습니다.`);
+    } catch (e) {
+      toast.error("불러오기 실패: " + (e as Error).message);
     }
   };
 
@@ -334,18 +527,100 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1.5">
               <Label>진도 그룹</Label>
-              <Select value={groupKey} onValueChange={setGroupKey}>
-                <SelectTrigger className="w-[220px]">
-                  <SelectValue placeholder="학년·교과 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  {groups.map((g) => (
-                    <SelectItem key={g.key} value={g.key}>
-                      {g.name} ({g.count}반)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={groupKey} onValueChange={setGroupKey}>
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="학년·교과 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {groups.map((g) => (
+                      <SelectItem key={g.key} value={g.key}>
+                        {g.name} ({g.count}반)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Dialog open={isManageModalOpen} onOpenChange={setIsManageModalOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-10">그룹 설정</Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>진도 그룹 설정 및 관리</DialogTitle>
+                      <DialogDescription>
+                        원하는 반을 묶어 진도를 공유하는 그룹을 만듭니다.
+                      </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="space-y-4 py-4">
+                      {/* 기존 그룹 목록 및 수정/삭제 */}
+                      <div className="space-y-2">
+                        <Label className="text-xs font-semibold text-muted-foreground">현재 진도 그룹 목록</Label>
+                        <div className="max-h-[160px] overflow-y-auto space-y-1 border rounded p-2 bg-muted/20">
+                          {curricula.map((c) => (
+                            <div key={c.id} className="flex items-center justify-between text-sm p-1.5 rounded hover:bg-muted/50">
+                              <span className="font-medium">{c.name} <span className="text-xs text-muted-foreground">({c.classIds?.length || 0}개 반)</span></span>
+                              <div className="flex gap-1.5">
+                                <Button variant="ghost" className="h-7 text-xs px-2" onClick={() => handleEditGroup(c.id)}>수정</Button>
+                                <Button variant="ghost" className="h-7 text-xs px-2 text-rose-600 hover:text-rose-700" onClick={() => handleDeleteGroup(c.id)}>삭제</Button>
+                              </div>
+                            </div>
+                          ))}
+                          {curricula.length === 0 && (
+                            <p className="text-xs text-muted-foreground text-center py-4">등록된 그룹이 없습니다.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <hr className="my-1" />
+
+                      {/* 그룹 추가/수정 폼 */}
+                      <div className="space-y-3 border p-3 rounded bg-muted/10">
+                        <h4 className="text-sm font-semibold">{editingGroupId ? "그룹 수정" : "새 그룹 생성"}</h4>
+                        <div className="space-y-1">
+                          <Label htmlFor="group-name" className="text-xs">그룹 이름</Label>
+                           <Input
+                             id="group-name"
+                             value={newGroupName}
+                             onChange={(e) => setNewGroupName(e.target.value)}
+                             placeholder="예: 2학년 문학 A그룹, 방과후 국어"
+                           />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">포함할 학급 선택</Label>
+                          <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto border rounded p-2 bg-white">
+                            {activeClasses.map((c) => (
+                              <label key={c.id} className="flex items-center gap-2 text-xs cursor-pointer p-1 rounded hover:bg-muted/30">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedClassIds.includes(c.id)}
+                                  onChange={() => handleToggleClassSelection(c.id)}
+                                />
+                                <span>{classLabel(c)}</span>
+                              </label>
+                            ))}
+                            {activeClasses.length === 0 && (
+                              <p className="text-xs text-muted-foreground col-span-2 text-center py-4">등록된 학급이 없습니다.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-1">
+                          {editingGroupId && (
+                            <Button variant="outline" size="sm" onClick={() => { setEditingGroupId(null); setNewGroupName(""); setSelectedClassIds([]); }}>취소</Button>
+                          )}
+                          <Button size="sm" onClick={handleSaveGroup}>{editingGroupId ? "변경사항 저장" : "새 그룹 생성"}</Button>
+                        </div>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsManageModalOpen(false)}>닫기</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </div>
             <div className="text-xs text-muted-foreground pb-2">
               대상 반:{" "}
@@ -358,9 +633,17 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label>진도 순서 (한 줄에 한 차시, "단원 | 주제")</Label>
-              <Button variant="outline" size="sm" onClick={handleSaveCurriculum}>
-                진도 순서 저장
-              </Button>
+              <div className="flex gap-1.5">
+                <Button variant="outline" size="sm" onClick={handleGeneratePlaceholderItems}>
+                  임시 차시 생성
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleImportFromExistingLessons}>
+                  기존 수업에서 가져오기
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleSaveCurriculum}>
+                  진도 순서 저장
+                </Button>
+              </div>
             </div>
             <Textarea
               rows={5}
@@ -376,30 +659,46 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
 
         {/* 2~3단계: 미리보기 (요일 교체 / 쉬는 날 / 여러 주 채우기) */}
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Label>미리보기 · 주간 배치</Label>
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs text-muted-foreground">채울 주 수</Label>
-              <Select value={String(weekCount)} onValueChange={(v) => setWeekCount(Number(v))}>
-                <SelectTrigger className="h-8 w-[90px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3, 4, 5, 6].map((n) => (
-                    <SelectItem key={n} value={String(n)} className="text-xs">
-                      {n}주
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-2">
+            <Label className="text-sm font-semibold">미리보기 · 주간 배치</Label>
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs text-muted-foreground">채울 주 수</Label>
+                <Select value={String(weekCount)} onValueChange={(v) => setWeekCount(Number(v))}>
+                  <SelectTrigger className="h-8 w-[80px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5, 6].map((n) => (
+                      <SelectItem key={n} value={String(n)} className="text-xs">
+                        {n}주
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs text-muted-foreground">진도 부족 시 처리</Label>
+                <Select value={shortageStrategy} onValueChange={(v) => setShortageStrategy(v as any)}>
+                  <SelectTrigger className="h-8 w-[140px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="repeat" className="text-xs">순환 반복 채우기</SelectItem>
+                    <SelectItem value="empty" className="text-xs">빈 칸으로 등록</SelectItem>
+                    <SelectItem value="skip" className="text-xs">등록 안 함 (건너뛰기)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
             선택한 주에 진도가 다 안 들어가면 <b>채울 주 수</b>를 늘리세요. 남은 차시가 다음 주 시간표로 이어집니다.
           </p>
-          {items.length === 0 ? (
+          {items.length === 0 && shortageStrategy !== "empty" ? (
             <p className="text-sm text-muted-foreground border rounded p-3">
-              진도 순서를 먼저 입력하세요.
+              진도 순서를 먼저 입력하거나 진도 부족 시 처리를 "빈 칸으로 등록"으로 선택하세요.
             </p>
           ) : !hasAnySlot ? (
             <p className="text-sm text-muted-foreground border rounded p-3">
@@ -544,11 +843,11 @@ function ProgressRowView({
   }
   if (row.status === "noitem") {
     return (
-      <div className="text-xs rounded border border-amber-300 bg-amber-50 p-1.5 text-amber-800">
+      <div className="text-xs rounded border border-dashed p-1.5 bg-muted/30 text-muted-foreground">
         <div className="font-medium">
           {row.classLabel} · {row.period}교시
         </div>
-        <div>진도 순서 부족 — 목록을 더 채우세요</div>
+        <div>진도 부족 (등록 제외)</div>
       </div>
     );
   }

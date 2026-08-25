@@ -33,6 +33,7 @@ export interface PlanInput {
   items: { unit: string; topic: string }[]; // 진도 순서
   progress: Record<string, number>; // 반별 시작 진도 위치
   weekdayOf: (date: string) => number;
+  shortageStrategy?: "repeat" | "skip" | "empty"; // 진도 부족 시 처리 전략
 }
 
 /**
@@ -63,8 +64,30 @@ export function planWeek(p: PlanInput): DayBlock[] {
       };
       if (p.existing.has(slotKey)) return { ...base, status: "exists" as const };
       if (p.skip[slotKey]) return { ...base, status: "skipped" as const };
+      
       const idx = counters[s.classId] ?? 0;
-      if (idx >= p.items.length) return { ...base, status: "noitem" as const };
+      const strategy = p.shortageStrategy ?? "skip";
+
+      if (p.items.length === 0) {
+        if (strategy === "empty") {
+          return { ...base, status: "assign" as const, item: { unit: "", topic: "" } };
+        }
+        return { ...base, status: "noitem" as const };
+      }
+
+      if (idx >= p.items.length) {
+        if (strategy === "repeat") {
+          const repeatIdx = idx % p.items.length;
+          counters[s.classId] = idx + 1;
+          return { ...base, status: "assign" as const, item: p.items[repeatIdx] };
+        } else if (strategy === "empty") {
+          counters[s.classId] = idx + 1;
+          return { ...base, status: "assign" as const, item: { unit: "", topic: "" } };
+        } else {
+          return { ...base, status: "noitem" as const };
+        }
+      }
+
       counters[s.classId] = idx + 1;
       return { ...base, status: "assign" as const, item: p.items[idx] };
     });
