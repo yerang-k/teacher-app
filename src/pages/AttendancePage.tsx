@@ -72,6 +72,7 @@ export default function AttendancePage() {
     Record<string, { status: AttendanceStatus; reason?: string }>
   >({});
   const [saving, setSaving] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const students = useMemo(
     () => (classId ? getStudentsByClass(classId) : []),
@@ -82,6 +83,43 @@ export default function AttendancePage() {
   useEffect(() => {
     if (classId && date) loadByClassDate(classId, date);
   }, [classId, date, loadByClassDate]);
+
+  // 학급/날짜 변경 시 선택된 학생 목록 초기화
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [classId, date]);
+
+  const handleToggleSelect = (studentId: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(studentId)
+        ? prev.filter((id) => id !== studentId)
+        : [...prev, studentId]
+    );
+  };
+
+  const handleToggleAll = () => {
+    if (selectedIds.length === students.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(students.map((s) => s.id));
+    }
+  };
+
+  const applyBulkStatus = (status: AttendanceStatus) => {
+    setDraft((prev) => {
+      const next = { ...prev };
+      selectedIds.forEach((id) => {
+        next[id] = {
+          ...next[id],
+          status,
+          reason: status === "출석" ? undefined : next[id]?.reason,
+        };
+      });
+      return next;
+    });
+    setSelectedIds([]);
+    toast.success(`${selectedIds.length}명의 출결을 '${status}'(으)로 변경했습니다.`);
+  };
 
   // 로드된 기록을 draft에 반영, 없는 학생은 기본 '출석'
   useEffect(() => {
@@ -256,22 +294,75 @@ export default function AttendancePage() {
                 이 학급에 등록된 학생이 없습니다. 설정에서 학생을 먼저 추가해주세요.
               </p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-16">번호</TableHead>
-                    <TableHead className="w-32">이름</TableHead>
-                    <TableHead className="w-40">상태</TableHead>
-                    <TableHead>사유 (선택)</TableHead>
-                    <TableHead className="w-24 text-right">표시</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {students.map((s) => {
-                    const cur = draft[s.id]?.status ?? "출석";
-                    return (
-                      <TableRow key={s.id}>
-                        <TableCell>{s.number}</TableCell>
+              <>
+                {selectedIds.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/40 rounded-lg mb-4 text-sm border">
+                    <span className="font-medium text-muted-foreground">{selectedIds.length}명 선택됨:</span>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => applyBulkStatus("결석")}
+                      className="h-8"
+                    >
+                      결석으로 변경
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => applyBulkStatus("출석")}
+                      className="h-8"
+                    >
+                      출석으로 변경
+                    </Button>
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <Select onValueChange={(v) => applyBulkStatus(v as AttendanceStatus)}>
+                        <SelectTrigger className="w-[130px] h-8 text-xs">
+                          <SelectValue placeholder="기타 상태 선택" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STATUS_OPTIONS.map((v) => (
+                            <SelectItem key={v} value={v}>
+                              {v}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                          checked={students.length > 0 && selectedIds.length === students.length}
+                          onChange={handleToggleAll}
+                        />
+                      </TableHead>
+                      <TableHead className="w-16">번호</TableHead>
+                      <TableHead className="w-32">이름</TableHead>
+                      <TableHead className="w-40">상태</TableHead>
+                      <TableHead>사유 (선택)</TableHead>
+                      <TableHead className="w-24 text-right">표시</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {students.map((s) => {
+                      const cur = draft[s.id]?.status ?? "출석";
+                      const isChecked = selectedIds.includes(s.id);
+                      return (
+                        <TableRow key={s.id} className={isChecked ? "bg-muted/30" : ""}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                              checked={isChecked}
+                              onChange={() => handleToggleSelect(s.id)}
+                            />
+                          </TableCell>
+                          <TableCell>{s.number}</TableCell>
                         <TableCell className="font-medium">{s.name}</TableCell>
                         <TableCell>
                           <Select
@@ -312,6 +403,7 @@ export default function AttendancePage() {
                   })}
                 </TableBody>
               </Table>
+              </>
             )}
           </CardContent>
         </Card>
