@@ -450,7 +450,7 @@ export default function AttendancePage() {
                   })}
                 </TableBody>
               </Table>
-            )}
+            </>)}
           </CardContent>
         </Card>
       )}
