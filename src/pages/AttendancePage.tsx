@@ -73,14 +73,22 @@ export default function AttendancePage() {
   >({});
   const [saving, setSaving] = useState(false);
 
+  // 다중 선택 및 일괄 변경 상태 추가
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<AttendanceStatus | "">("");
+  const [bulkReason, setBulkReason] = useState<string>("");
+
   const students = useMemo(
     () => (classId ? getStudentsByClass(classId) : []),
     [classId, getStudentsByClass]
   );
 
-  // 학급/날짜 변경 시 기존 기록 로드
+  // 학급/날짜 변경 시 기존 기록 로드 및 선택 해제
   useEffect(() => {
-    if (classId && date) loadByClassDate(classId, date);
+    if (classId && date) {
+      loadByClassDate(classId, date);
+      setSelectedStudentIds([]);
+    }
   }, [classId, date, loadByClassDate]);
 
   // 로드된 기록을 draft에 반영, 없는 학생은 기본 '출석'
@@ -144,6 +152,42 @@ export default function AttendancePage() {
     });
     setDraft(next);
     toast.info("전체 출석으로 초기화했습니다.");
+  };
+
+  const isAllSelected =
+    students.length > 0 && selectedStudentIds.length === students.length;
+  const isSomeSelected =
+    selectedStudentIds.length > 0 && selectedStudentIds.length < students.length;
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedStudentIds([]);
+    } else {
+      setSelectedStudentIds(students.map((s) => s.id));
+    }
+  };
+
+  const applyBulkUpdate = () => {
+    if (!bulkStatus) {
+      toast.error("변경할 출결 상태를 선택해주세요.");
+      return;
+    }
+    setDraft((d) => {
+      const next = { ...d };
+      selectedStudentIds.forEach((id) => {
+        next[id] = {
+          status: bulkStatus,
+          reason: bulkStatus === "출석" ? undefined : bulkReason,
+        };
+      });
+      return next;
+    });
+    setSelectedStudentIds([]);
+    setBulkStatus("");
+    setBulkReason("");
+    toast.success(
+      `${selectedStudentIds.length}명의 출결 상태를 '${bulkStatus}'(으)로 일괄 변경했습니다.`
+    );
   };
 
   const save = async () => {
@@ -256,54 +300,148 @@ export default function AttendancePage() {
                 이 학급에 등록된 학생이 없습니다. 설정에서 학생을 먼저 추가해주세요.
               </p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-16">번호</TableHead>
-                    <TableHead className="w-32">이름</TableHead>
-                    <TableHead className="w-40">상태</TableHead>
-                    <TableHead>사유 (선택)</TableHead>
-                    <TableHead className="w-24 text-right">표시</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {students.map((s) => {
-                    const cur = draft[s.id]?.status ?? "출석";
-                    return (
-                      <TableRow key={s.id}>
-                        <TableCell>{s.number}</TableCell>
-                        <TableCell className="font-medium">{s.name}</TableCell>
-                        <TableCell>
-                          <Select
-                            value={cur}
-                            onValueChange={(v) =>
-                              setStatus(s.id, v as AttendanceStatus)
+              <>
+                {/* 일괄 변경 제어 바 */}
+                {selectedStudentIds.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-3 p-3 mb-4 rounded-lg border bg-muted/40 text-sm animate-in fade-in slide-in-from-top-1 duration-200">
+                    <span className="font-semibold text-primary">
+                      {selectedStudentIds.length}명 선택됨
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={bulkStatus}
+                        onValueChange={(v) => {
+                          const status = v as AttendanceStatus;
+                          setBulkStatus(status);
+                          if (status === "출석") {
+                            setBulkReason("");
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-[120px] h-9">
+                          <SelectValue placeholder="상태 선택" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STATUS_OPTIONS.map((v) => (
+                            <SelectItem key={v} value={v}>
+                              {v}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex-1 min-w-[200px]">
+                      <Input
+                        placeholder={
+                          bulkStatus === "출석"
+                            ? "출석은 사유를 입력할 수 없습니다"
+                            : !bulkStatus
+                            ? "상태를 선택해주세요"
+                            : "사유 입력 (선택)"
+                        }
+                        value={bulkReason}
+                        onChange={(e) => setBulkReason(e.target.value)}
+                        disabled={bulkStatus === "출석" || !bulkStatus}
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={applyBulkUpdate} disabled={!bulkStatus}>
+                        일괄 변경
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setSelectedStudentIds([]);
+                          setBulkStatus("");
+                          setBulkReason("");
+                        }}
+                      >
+                        선택 취소
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isAllSelected}
+                          ref={(el) => {
+                            if (el) {
+                              el.indeterminate = isSomeSelected;
                             }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {STATUS_OPTIONS.map((v) => (
-                                <SelectItem key={v} value={v}>
-                                  {v}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            placeholder={
-                              cur === "출석"
-                                ? "—"
-                                : "예) 병결, 학교장 허가 등"
-                            }
-                            value={draft[s.id]?.reason ?? ""}
-                            onChange={(e) => setReason(s.id, e.target.value)}
-                            disabled={cur === "출석"}
-                          />
-                        </TableCell>
+                          }}
+                          onChange={toggleSelectAll}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer align-middle"
+                        />
+                      </TableHead>
+                      <TableHead className="w-16">번호</TableHead>
+                      <TableHead className="w-32">이름</TableHead>
+                      <TableHead className="w-40">상태</TableHead>
+                      <TableHead>사유 (선택)</TableHead>
+                      <TableHead className="w-24 text-right">표시</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {students.map((s) => {
+                      const cur = draft[s.id]?.status ?? "출석";
+                      const isSelected = selectedStudentIds.includes(s.id);
+                      return (
+                        <TableRow key={s.id} className={isSelected ? "bg-muted/30" : ""}>
+                          <TableCell className="text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedStudentIds((prev) => [...prev, s.id]);
+                                } else {
+                                  setSelectedStudentIds((prev) =>
+                                    prev.filter((id) => id !== s.id)
+                                  );
+                                }
+                              }}
+                              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer align-middle"
+                            />
+                          </TableCell>
+                          <TableCell>{s.number}</TableCell>
+                          <TableCell className="font-medium">{s.name}</TableCell>
+                          <TableCell>
+                            <Select
+                              value={cur}
+                              onValueChange={(v) =>
+                                setStatus(s.id, v as AttendanceStatus)
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {STATUS_OPTIONS.map((v) => (
+                                  <SelectItem key={v} value={v}>
+                                    {v}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              placeholder={
+                                cur === "출석"
+                                  ? "—"
+                                  : "예) 병결, 학교장 허가 등"
+                              }
+                              value={draft[s.id]?.reason ?? ""}
+                              onChange={(e) => setReason(s.id, e.target.value)}
+                              disabled={cur === "출석"}
+                            />
+                          </TableCell>
                         <TableCell className="text-right">
                           <Badge variant={STATUS_VARIANT[cur]}>{cur}</Badge>
                         </TableCell>
