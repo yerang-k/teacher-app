@@ -46,9 +46,6 @@ const DOW_LABEL = ["일", "월", "화", "수", "목", "금", "토"];
 function groupKeyOf(c: SchoolClass): string {
   return `${c.grade}-${c.subject || "기타"}`;
 }
-function groupNameOf(c: SchoolClass): string {
-  return `${c.grade}학년 ${c.subject || "기타"}`;
-}
 
 /** "단원 | 주제" 텍스트를 차시 목록으로 파싱 (구분자 없으면 전체가 주제) */
 function parseItems(text: string): { unit: string; topic: string }[] {
@@ -119,53 +116,25 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
   const [newGroupName, setNewGroupName] = useState("");
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
 
-  // 진도 그룹 자동 초기화 및 학급 매핑 마이그레이션
+  // 기존 그룹의 학급 매핑 하위호환 마이그레이션.
+  // 그룹은 사용자가 "그룹 설정"에서 직접 만든다. 여기서 새 그룹을 자동 생성하지 않는다.
+  // (예전엔 학년·교과 조합마다 그룹을 자동 생성해서, 설정하지 않은 "3학년 고전읽기"
+  //  같은 그룹이 저절로 만들어지는 버그가 있었다.)
   useEffect(() => {
     if (!curricula || activeClasses.length === 0) return;
 
-    const initializeGroups = async () => {
-      const assignedClassIds = new Set<string>();
+    const migrateExistingGroups = async () => {
       for (const cur of curricula) {
-        if (cur.classIds) {
-          cur.classIds.forEach((id) => assignedClassIds.add(id));
-        } else {
-          // 하위 호환: classIds가 없는 기존 그룹인 경우 학년-교과 키 매칭하여 업데이트
-          const matchedClasses = activeClasses.filter((c) => groupKeyOf(c) === cur.id);
-          if (matchedClasses.length > 0) {
-            matchedClasses.forEach((c) => assignedClassIds.add(c.id));
-            await saveCurriculum(cur.id, cur.name, cur.items, matchedClasses.map((c) => c.id));
-          }
-        }
-      }
-
-      // 지정되지 않은 학급 탐색 및 기본 그룹 자동 할당
-      const unassignedClasses = activeClasses.filter((c) => !assignedClassIds.has(c.id));
-      if (unassignedClasses.length > 0) {
-        const tempGroups = new Map<string, { name: string; classIds: string[] }>();
-        for (const c of unassignedClasses) {
-          const key = groupKeyOf(c);
-          const name = groupNameOf(c);
-          const g = tempGroups.get(key);
-          if (g) {
-            g.classIds.push(c.id);
-          } else {
-            tempGroups.set(key, { name, classIds: [c.id] });
-          }
-        }
-        for (const [key, val] of tempGroups.entries()) {
-          const exists = curricula.some((c) => c.id === key);
-          if (!exists) {
-            await saveCurriculum(key, val.name, [], val.classIds);
-          } else {
-            const cur = curricula.find((c) => c.id === key)!;
-            const mergedClassIds = Array.from(new Set([...(cur.classIds || []), ...val.classIds]));
-            await saveCurriculum(key, cur.name, cur.items, mergedClassIds);
-          }
+        if (cur.classIds) continue;
+        // classIds가 없는 기존 그룹만 학년-교과 키로 매칭해 채워 넣는다.
+        const matchedClasses = activeClasses.filter((c) => groupKeyOf(c) === cur.id);
+        if (matchedClasses.length > 0) {
+          await saveCurriculum(cur.id, cur.name, cur.items, matchedClasses.map((c) => c.id));
         }
       }
     };
 
-    initializeGroups();
+    migrateExistingGroups();
   }, [curricula, activeClasses, saveCurriculum]);
 
   // 진도 그룹 목록 (학년·교과별 자동 생성 대신 DB curricula 기반)
