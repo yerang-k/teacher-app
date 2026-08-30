@@ -100,6 +100,8 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
   const [dayApplied, setDayApplied] = useState<Record<string, number>>({});
   const [skip, setSkip] = useState<Record<string, boolean>>({});
   const [progressByClass, setProgressByClass] = useState<Record<string, number>>({});
+  // 반별 시작 강 수동 지정(1-based). 비어 있으면 자동 감지된 진도 위치를 씀.
+  const [startOverride, setStartOverride] = useState<Record<string, number>>({});
   const [existing, setExisting] = useState<Set<string>>(new Set());
   const [batches, setBatches] = useState<
     { batchId: string; ids: string[]; count: number; minDate: string; maxDate: string; createdAt: number }[]
@@ -309,6 +311,20 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
   const classLabel = (c: SchoolClass) =>
     `${c.grade}-${c.classNumber}${c.homeroom ? " (담임)" : ""}`;
 
+  // 진도 그룹을 바꾸면 반별 시작 강 수동 지정은 리셋
+  useEffect(() => {
+    setStartOverride({});
+  }, [groupKey]);
+
+  // 자동 감지 위치 위에 수동 지정(1-based → 0-based 카운터)을 덮어씀
+  const effectiveProgress = useMemo(() => {
+    const out: Record<string, number> = { ...progressByClass };
+    for (const [cid, oneBased] of Object.entries(startOverride)) {
+      if (Number.isFinite(oneBased) && oneBased >= 1) out[cid] = oneBased - 1;
+    }
+    return out;
+  }, [progressByClass, startOverride]);
+
   // 미리보기 계산 (순수 함수 planWeek 사용)
   const blocks = useMemo<DayBlock[]>(() => {
     const classLabels: Record<string, string> = {};
@@ -321,12 +337,12 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
       existing,
       skip,
       items,
-      progress: progressByClass,
+      progress: effectiveProgress,
       weekdayOf,
       shortageStrategy,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allDays, dayApplied, slots, groupClasses, existing, skip, items, progressByClass, shortageStrategy]);
+  }, [allDays, dayApplied, slots, groupClasses, existing, skip, items, effectiveProgress, shortageStrategy]);
 
   const assignRows = useMemo(
     () => blocks.flatMap((b) => b.rows).filter((r) => r.status === "assign"),
@@ -629,6 +645,52 @@ export default function WeeklyProgressFill({ weekDays }: { weekDays: string[] })
                 : "없음"}
             </div>
           </div>
+
+          {/* 반별 시작 강: 반마다 이번에 시작할 차시를 다르게 지정 */}
+          {groupClasses.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>반별 시작 강</Label>
+              <p className="text-xs text-muted-foreground">
+                반마다 이번에 시작할 차시를 다르게 지정할 수 있습니다. 비워두면 지금까지 등록된 진도에서 이어집니다.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {groupClasses.map((c) => {
+                  const done = progressByClass[c.id] ?? 0;
+                  const ov = startOverride[c.id];
+                  return (
+                    <div
+                      key={c.id}
+                      className="flex items-center gap-1.5 rounded border px-2 py-1"
+                    >
+                      <span className="text-sm font-medium">
+                        {c.grade}-{c.classNumber}반
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {done > 0 ? `현재 ${done}강까지` : "시작 전"}
+                      </span>
+                      <Input
+                        type="number"
+                        min={1}
+                        className="h-7 w-16 text-xs"
+                        placeholder={String(done + 1)}
+                        value={ov ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setStartOverride((prev) => {
+                            const next = { ...prev };
+                            if (v === "") delete next[c.id];
+                            else next[c.id] = Math.max(1, Math.floor(Number(v)));
+                            return next;
+                          });
+                        }}
+                      />
+                      <span className="text-xs text-muted-foreground">강부터</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
