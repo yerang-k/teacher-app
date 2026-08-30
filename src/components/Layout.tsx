@@ -22,13 +22,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const storageLabel = getSyncUrl() ? "구글 드라이브 동기화" : "이 기기에 저장";
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="min-h-screen">
       {/* 사이드바 */}
-      {/* 껍데기를 화면 높이로 고정(h-screen overflow-hidden)하고 오른쪽 본문만
-          스크롤시킨다. 사이드바 안에서도 제목은 위, 저작권은 맨 아래에 고정하고
-          메뉴만 flex-1 overflow-y-auto로 스크롤시켜, 화면이 짧아도 저작권이
-          항상 바닥에 붙어 잘리지 않게 한다. */}
-      <aside className="w-56 border-r bg-muted/30 flex flex-col h-full">
+      {/* position:fixed + inset-y-0(top:0·bottom:0)로 화면 위·아래 양끝에 붙박아,
+          100vh 계산에 의존하지 않고 어떤 환경(줌·조상 요소·모바일 UI)에서도
+          정확히 보이는 화면 높이에 딱 맞춘다. 제목은 위, 저작권은 아래에 고정하고
+          메뉴만 스크롤시켜 저작권이 항상 바닥에 붙어 잘리지 않게 한다.
+          본문은 ml-56으로 사이드바 폭만큼 밀어 겹치지 않게 한다. */}
+      <aside className="fixed inset-y-0 left-0 z-20 w-56 border-r bg-muted/30 flex flex-col">
         <div className="p-4 pb-3 border-b shrink-0">
           <div className="font-bold text-lg">교사 도우미</div>
           <div className="text-xs text-muted-foreground">
@@ -71,8 +72,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* 메인 콘텐츠 (여기만 스크롤) */}
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      {/* 메인 콘텐츠 (사이드바 폭만큼 밀고, 페이지 자체가 스크롤) */}
+      <main className="ml-56 min-h-screen">{children}</main>
     </div>
   );
 }
