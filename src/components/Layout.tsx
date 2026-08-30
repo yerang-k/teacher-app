@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useTaskStore } from "@/stores";
+import { getSyncUrl } from "@/lib/cloudSync";
 
 const MENU = [
   { href: "/", label: "홈", icon: "🏠" },
@@ -17,6 +18,8 @@ const MENU = [
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const overdueCount = useTaskStore((s) => s.overdue().length);
+  // 구글 드라이브 동기화 주소가 설정돼 있으면 드라이브에, 없으면 이 기기에만 저장됨
+  const storageLabel = getSyncUrl() ? "구글 드라이브 동기화" : "이 기기에 저장";
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -58,7 +61,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="shrink-0 border-t p-4 text-xs text-muted-foreground space-y-1">
-          <div>v2.0 · 로컬 저장</div>
+          <div>v2.0 · {storageLabel}</div>
           <div>교사 도우미 &copy; 2026 KIMYERANG.</div>
           <div className="break-keep">
             본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는
