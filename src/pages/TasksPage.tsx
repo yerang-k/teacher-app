@@ -314,11 +314,7 @@ export default function TasksPage() {
   };
 
   return (
-    <div
-      className={`container mx-auto p-4 sm:p-6 space-y-5 ${
-        viewMode === "calendar" ? "max-w-5xl" : "max-w-3xl"
-      }`}
-    >
+    <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-5xl">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">업무 관리</h1>
