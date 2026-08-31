@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { useTaskStore } from "@/stores";
 import { todayKey, daysBetween } from "@/lib/dateUtils";
 import { linkifyText } from "@/lib/linkify";
+import TaskCalendar from "@/components/TaskCalendar";
 import type {
   SchoolTask,
   TaskCategory,
@@ -139,6 +140,7 @@ export default function TasksPage() {
   const [checklistInput, setChecklistInput] = useState("");
   const [showDone, setShowDone] = useState(false);
   const [showSource, setShowSource] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
 
   useEffect(() => {
     loadAll();
@@ -159,6 +161,18 @@ export default function TasksPage() {
   const openEdit = (t: SchoolTask) => {
     setEditing(t);
     setShowSource(false);
+    setDialogOpen(true);
+  };
+
+  const openNewOnDate = (dateKey: string) => {
+    setEditing({
+      title: "",
+      description: "",
+      category: "정보부",
+      priority: "보통",
+      status: "대기",
+      dueDate: dateKey,
+    });
     setDialogOpen(true);
   };
 
@@ -300,7 +314,11 @@ export default function TasksPage() {
   };
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-3xl">
+    <div
+      className={`container mx-auto p-4 sm:p-6 space-y-5 ${
+        viewMode === "calendar" ? "max-w-5xl" : "max-w-3xl"
+      }`}
+    >
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">업무 관리</h1>
@@ -308,9 +326,29 @@ export default function TasksPage() {
             마감일 기준으로 정리했어요. 처리할 일이 {activeCount}건 있습니다.
           </p>
         </div>
-        <Button onClick={openNew} className="shrink-0">
-          + 새 업무
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex rounded-md border p-0.5">
+            <Button
+              variant={viewMode === "list" ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2.5"
+              onClick={() => setViewMode("list")}
+            >
+              목록
+            </Button>
+            <Button
+              variant={viewMode === "calendar" ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2.5"
+              onClick={() => setViewMode("calendar")}
+            >
+              달력
+            </Button>
+          </div>
+          <Button onClick={openNew} className="shrink-0">
+            + 새 업무
+          </Button>
+        </div>
       </div>
 
       {/* 필터 */}
@@ -376,8 +414,9 @@ export default function TasksPage() {
         </CardContent>
       </Card>
 
-      {/* 마감일 섹션 목록 */}
-      {view.length === 0 ? (
+      {viewMode === "calendar" ? (
+        <TaskCalendar tasks={view} onTaskClick={openEdit} onDayClick={openNewOnDate} />
+      ) : view.length === 0 ? (
         <div className="text-center text-muted-foreground py-16">
           <p className="text-4xl mb-2">🗒️</p>
           <p>표시할 업무가 없습니다.</p>
