@@ -27,6 +27,7 @@ import { toast } from "sonner";
 
 import { useTaskStore } from "@/stores";
 import { todayKey, daysBetween } from "@/lib/dateUtils";
+import { linkifyText } from "@/lib/linkify";
 import type {
   SchoolTask,
   TaskCategory,
@@ -470,7 +471,7 @@ export default function TasksPage() {
                       </button>
                       {showSource && (
                         <pre className="mt-1.5 max-h-60 overflow-auto whitespace-pre-wrap rounded border bg-white p-2 text-xs text-slate-700">
-                          {editing.sourceBody}
+                          {linkifyText(editing.sourceBody)}
                         </pre>
                       )}
                     </div>
