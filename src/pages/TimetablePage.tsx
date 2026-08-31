@@ -25,6 +25,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
@@ -150,6 +151,29 @@ export default function TimetablePage() {
           >
             {editMode ? "✓ 편집 종료" : "✎ 시간표 편집"}
           </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="icon" title="시간표 사용법">
+                ❔
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>시간표 사용법</DialogTitle>
+              </DialogHeader>
+              <div className="text-sm space-y-2 text-muted-foreground">
+                <p>
+                  <strong className="text-foreground">처음 사용시:</strong> 우상단의 "시간표 편집" 버튼을 누르고, 각 칸의 드롭다운에서 학급을 선택해 시간표를 만드세요.
+                </p>
+                <p>
+                  <strong className="text-foreground">평소 사용시:</strong> 편집 모드를 끄고, 시간표의 한 칸을 클릭하면 여기에 그 학급의 출결·수업·진도 입력 영역이 나타납니다.
+                </p>
+                <p>
+                  <strong className="text-foreground">학급명 클릭:</strong> 그 학급의 전체 진도 목록을 볼 수 있습니다.
+                </p>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -233,22 +257,9 @@ export default function TimetablePage() {
 
         <div className="space-y-3">
           {!selected && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">시간표 사용법</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm space-y-2 text-muted-foreground">
-                <p>
-                  <strong className="text-foreground">처음 사용시:</strong> 우상단의 "시간표 편집" 버튼을 누르고, 각 칸의 드롭다운에서 학급을 선택해 시간표를 만드세요.
-                </p>
-                <p>
-                  <strong className="text-foreground">평소 사용시:</strong> 편집 모드를 끄고, 시간표의 한 칸을 클릭하면 여기에 그 학급의 출결·수업·진도 입력 영역이 나타납니다.
-                </p>
-                <p>
-                  <strong className="text-foreground">학급명 클릭:</strong> 그 학급의 전체 진도 목록을 볼 수 있습니다.
-                </p>
-              </CardContent>
-            </Card>
+            <div className="text-sm text-muted-foreground text-center py-10 border rounded-lg border-dashed">
+              칸을 클릭하면 출결·수업 관리가 여기 나타납니다.
+            </div>
           )}
 
           {selected && selectedDate && (
