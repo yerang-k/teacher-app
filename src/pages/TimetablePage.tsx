@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Card,
   CardContent,
@@ -37,6 +37,7 @@ import {
   useSettingsStore,
 } from "@/stores";
 import { todayKey, toDateKey, weekdaysOfThisWeek } from "@/lib/dateUtils";
+import { db } from "@/db";
 import type {
   Semester,
   AttendanceStatus,
@@ -102,6 +103,21 @@ export default function TimetablePage() {
   useEffect(() => {
     loadByTerm(year, semester);
   }, [year, semester, loadByTerm]);
+
+  // 정규 시간표에 없는 칸에 기록된 임시(교체·대체) 수업을 격자에 표시하기 위한 조회.
+  // lessonStore.lessons는 SidePanel이 단일 날짜로 덮어쓰므로, 이 주 전체 조회는
+  // 전역 store와 별개로 직접 DB에서 읽고 store 변경을 감지해서만 다시 읽는다.
+  const lessonsChangeSignal = useLessonStore((s) => s.lessons);
+  const [weekLessons, setWeekLessons] = useState<Lesson[]>([]);
+  useEffect(() => {
+    const from = weekMonday;
+    const to = dateOfWeek(weekMonday, 5);
+    db.lessons
+      .where("date")
+      .between(from, to, true, true)
+      .toArray()
+      .then(setWeekLessons);
+  }, [weekMonday, lessonsChangeSignal]);
 
   const shiftWeek = (delta: number) => setWeekMonday((w) => addDays(w, delta * 7));
 
@@ -239,6 +255,8 @@ export default function TimetablePage() {
                   period={period}
                   classes={classes}
                   slots={slots}
+                  weekMonday={weekMonday}
+                  weekLessons={weekLessons}
                   selected={selected}
                   editMode={editMode}
                   year={year}
@@ -264,6 +282,7 @@ export default function TimetablePage() {
 
           {selected && selectedDate && (
             <SidePanel
+              key={`${selectedDate}-${selected.period}`}
               day={selected.day}
               period={selected.period}
               date={selectedDate}
@@ -285,6 +304,8 @@ function Row({
   period,
   classes,
   slots,
+  weekMonday,
+  weekLessons,
   selected,
   editMode,
   year,
@@ -296,6 +317,8 @@ function Row({
   period: number;
   classes: ReturnType<typeof useClassStore.getState>["classes"];
   slots: TimetableSlot[];
+  weekMonday: string;
+  weekLessons: Lesson[];
   selected: { day: 1 | 2 | 3 | 4 | 5; period: number } | null;
   editMode: boolean;
   year: number;
@@ -316,6 +339,13 @@ function Row({
         const klass = slot ? classes.find((c) => c.id === slot.classId) : null;
         const isSelected =
           selected && selected.day === d.value && selected.period === period;
+        const cellDate = dateOfWeek(weekMonday, d.value);
+        const subLesson = !klass
+          ? weekLessons.find((l) => l.date === cellDate && l.period === period)
+          : null;
+        const subKlass = subLesson
+          ? classes.find((c) => c.id === subLesson.classId)
+          : null;
 
         if (editMode) {
           return (
@@ -385,6 +415,8 @@ function Row({
                 ? "bg-primary text-primary-foreground border-primary"
                 : klass
                 ? "bg-card hover:bg-accent/40"
+                : subKlass
+                ? "bg-amber-50 border-amber-300 border-dashed hover:bg-amber-100"
                 : "bg-muted/20 hover:bg-muted/40"
             }`}
           >
@@ -399,6 +431,15 @@ function Row({
                 {slot?.room && (
                   <div className="text-[10px] opacity-70">{slot.room}</div>
                 )}
+              </div>
+            ) : subKlass ? (
+              <div className="text-xs">
+                <div className={`font-semibold ${isSelected ? "" : "text-amber-800"}`}>
+                  {subKlass.grade}-{subKlass.classNumber}
+                </div>
+                <div className={isSelected ? "opacity-90" : "text-amber-600"}>
+                  🔄 임시수업
+                </div>
               </div>
             ) : (
               <span className="text-xs text-muted-foreground">—</span>
@@ -431,9 +472,32 @@ function SidePanel({
   >["students"];
   onClose: () => void;
 }) {
-  const klass = slot ? classes.find((c) => c.id === slot.classId) : null;
+  const regularKlass = slot ? classes.find((c) => c.id === slot.classId) : null;
   const dayLabel = DAYS.find((d) => d.value === day)?.label ?? "";
   const [classProgressOpen, setClassProgressOpen] = useState(false);
+
+  // 정규 시간표에 없는 칸: 교체·대체 수업이면 이 날짜에만 임시로 학급을 지정
+  const lessons = useLessonStore((s) => s.lessons);
+  const loadLessonsByDateRange = useLessonStore((s) => s.loadByDateRange);
+  useEffect(() => {
+    loadLessonsByDateRange(date, date);
+  }, [date, loadLessonsByDateRange]);
+
+  const tempLesson = !regularKlass
+    ? lessons.find((l) => l.date === date && l.period === period)
+    : null;
+  const [tempClassId, setTempClassId] = useState("");
+  const autoFilledRef = useRef(false);
+  useEffect(() => {
+    if (tempLesson && !autoFilledRef.current) {
+      setTempClassId(tempLesson.classId);
+      autoFilledRef.current = true;
+    }
+  }, [tempLesson]);
+
+  const klass =
+    regularKlass ?? (tempClassId ? classes.find((c) => c.id === tempClassId) ?? null : null);
+  const isTemp = !regularKlass && !!klass;
 
   return (
     <>
@@ -452,10 +516,27 @@ function SidePanel({
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {!klass && (
-            <p className="text-sm text-muted-foreground">
-              이 칸에 배정된 학급이 없습니다. 우상단 "시간표 편집"으로 학급을 추가하세요.
-            </p>
+          {!regularKlass && (
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground">
+                정규 시간표엔 없는 시간이에요. 교체·대체 수업이라면 학급을 선택해 이 날짜에만
+                기록하세요 (정규 시간표는 바뀌지 않습니다).
+              </p>
+              <Select value={tempClassId} onValueChange={setTempClassId}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="학급 선택 (교체·대체 수업)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {classes
+                    .filter((c) => !c.archived)
+                    .map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.grade}-{c.classNumber} {c.homeroom ? "(담임)" : `(${c.subject})`}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
           {klass && (
             <>
@@ -468,6 +549,11 @@ function SidePanel({
                   <span className="text-xs ml-1 text-muted-foreground">
                     ({klass.homeroom ? "담임" : klass.subject})
                   </span>
+                  {isTemp && (
+                    <Badge variant="outline" className="ml-2 text-[10px] align-middle">
+                      🔄 임시(교체·대체)
+                    </Badge>
+                  )}
                 </button>
                 <Button
                   size="sm"
