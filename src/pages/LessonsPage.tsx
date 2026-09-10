@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
-import { useClassStore, useLessonStore } from "@/stores";
+import { useClassStore, useLessonStore, useTimetableStore, useSettingsStore } from "@/stores";
 import { todayKey, weekdaysOfThisWeek } from "@/lib/dateUtils";
 import type { Lesson, LessonStatus } from "@/types";
 import WeeklyProgressFill from "@/components/WeeklyProgressFill";
@@ -59,6 +59,16 @@ export default function LessonsPage() {
   const addLesson = useLessonStore((s) => s.addLesson);
   const updateLesson = useLessonStore((s) => s.updateLesson);
   const removeLesson = useLessonStore((s) => s.removeLesson);
+
+  // 삭제 시 정규 시간표에 있는 수업인지 확인해서, 있으면 완전 삭제 대신
+  // 이 날짜만 "취소" 처리(휴강)한다 — 시간표 탭 격자에도 반영되고, 정규
+  // 시간표 자체(다음 주 이후)는 그대로 유지된다.
+  const timetableSlots = useTimetableStore((s) => s.slots);
+  const loadTimetableByTerm = useTimetableStore((s) => s.loadByTerm);
+  const settings = useSettingsStore((s) => s.settings);
+  useEffect(() => {
+    loadTimetableByTerm(settings.currentYear, settings.currentSemester);
+  }, [settings.currentYear, settings.currentSemester, loadTimetableByTerm]);
 
   const [classId, setClassId] = useState<string>("all");
   const [weekStart, setWeekStart] = useState<string>(
@@ -150,12 +160,37 @@ export default function LessonsPage() {
   };
 
   const deleteEditing = async () => {
-    if (!editing?.id) return;
-    if (!confirm("이 차시를 삭제할까요?")) return;
-    await removeLesson(editing.id);
+    if (!editing?.id || !editing.date || !editing.classId) return;
+
+    // 이 차시가 정규 시간표(요일·교시·학급)와 일치하는지 확인
+    const dow = new Date(editing.date + "T00:00:00").getDay();
+    const matchesRegularSlot =
+      dow >= 1 &&
+      dow <= 5 &&
+      timetableSlots.some(
+        (s) =>
+          s.dayOfWeek === dow &&
+          s.period === editing.period &&
+          s.classId === editing.classId
+      );
+
+    if (matchesRegularSlot && editing.status !== "취소") {
+      if (
+        !confirm(
+          "정규 시간표에 있는 수업이에요. 이 날짜만 휴강(취소) 처리할까요? " +
+            "시간표 탭에도 반영되고, 정규 시간표 자체(다음 주 이후)는 바뀌지 않습니다."
+        )
+      )
+        return;
+      await updateLesson(editing.id, { status: "취소" });
+      toast.success("이 날짜의 수업을 휴강(취소) 처리했습니다.");
+    } else {
+      if (!confirm("이 차시를 삭제할까요?")) return;
+      await removeLesson(editing.id);
+      toast.success("삭제했습니다.");
+    }
     setDialogOpen(false);
     setEditing(null);
-    toast.success("삭제했습니다.");
   };
 
   const shiftWeek = (delta: number) => {

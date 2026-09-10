@@ -340,12 +340,17 @@ function Row({
         const isSelected =
           selected && selected.day === d.value && selected.period === period;
         const cellDate = dateOfWeek(weekMonday, d.value);
-        const subLesson = !klass
-          ? weekLessons.find((l) => l.date === cellDate && l.period === period)
-          : null;
-        const subKlass = subLesson
-          ? classes.find((c) => c.id === subLesson.classId)
-          : null;
+        // 수업진도 탭에서 이 날짜·교시에 기록된 수업(상태 포함)을 확인해
+        // "취소" 처리면 정규 시간표가 있어도 이 날짜만 휴강으로, 학급이 다르면
+        // 교체·대체 수업으로 격자에 반영한다. 정규 시간표(slots) 자체는 안 바뀐다.
+        const overrideLesson = weekLessons.find(
+          (l) => l.date === cellDate && l.period === period
+        );
+        const isCancelled = overrideLesson?.status === "취소";
+        const subKlass =
+          overrideLesson && !isCancelled && overrideLesson.classId !== klass?.id
+            ? classes.find((c) => c.id === overrideLesson.classId)
+            : null;
 
         if (editMode) {
           return (
@@ -413,14 +418,47 @@ function Row({
             className={`border rounded p-1.5 min-h-[60px] text-left transition-colors ${
               isSelected
                 ? "bg-primary text-primary-foreground border-primary"
-                : klass
-                ? "bg-card hover:bg-accent/40"
+                : isCancelled
+                ? "bg-muted/30 border-dashed opacity-70 hover:bg-muted/50"
                 : subKlass
                 ? "bg-amber-50 border-amber-300 border-dashed hover:bg-amber-100"
+                : klass
+                ? "bg-card hover:bg-accent/40"
                 : "bg-muted/20 hover:bg-muted/40"
             }`}
           >
-            {klass ? (
+            {isCancelled ? (
+              <div className="text-xs">
+                <div
+                  className={`font-semibold line-through ${
+                    isSelected ? "" : "text-muted-foreground"
+                  }`}
+                >
+                  {klass ? `${klass.grade}-${klass.classNumber}` : "휴강"}
+                </div>
+                <div className={isSelected ? "opacity-90" : "text-muted-foreground"}>
+                  휴강(취소)
+                </div>
+              </div>
+            ) : subKlass ? (
+              <div className="text-xs">
+                <div className={`font-semibold ${isSelected ? "" : "text-amber-800"}`}>
+                  {subKlass.grade}-{subKlass.classNumber}
+                </div>
+                <div className={isSelected ? "opacity-90" : "text-amber-600"}>
+                  🔄 교체·대체
+                </div>
+                {klass && (
+                  <div
+                    className={`text-[10px] line-through ${
+                      isSelected ? "opacity-70" : "text-muted-foreground"
+                    }`}
+                  >
+                    {klass.grade}-{klass.classNumber}
+                  </div>
+                )}
+              </div>
+            ) : klass ? (
               <div className="text-xs">
                 <div className="font-semibold">
                   {klass.grade}-{klass.classNumber}
@@ -431,15 +469,6 @@ function Row({
                 {slot?.room && (
                   <div className="text-[10px] opacity-70">{slot.room}</div>
                 )}
-              </div>
-            ) : subKlass ? (
-              <div className="text-xs">
-                <div className={`font-semibold ${isSelected ? "" : "text-amber-800"}`}>
-                  {subKlass.grade}-{subKlass.classNumber}
-                </div>
-                <div className={isSelected ? "opacity-90" : "text-amber-600"}>
-                  🔄 임시수업
-                </div>
               </div>
             ) : (
               <span className="text-xs text-muted-foreground">—</span>
@@ -476,28 +505,47 @@ function SidePanel({
   const dayLabel = DAYS.find((d) => d.value === day)?.label ?? "";
   const [classProgressOpen, setClassProgressOpen] = useState(false);
 
-  // 정규 시간표에 없는 칸: 교체·대체 수업이면 이 날짜에만 임시로 학급을 지정
+  // 이 날짜·교시에 기록된 수업(있다면)을 확인해 교체·대체 여부를 판단.
+  // 정규 시간표(slot)가 있는 칸도 다른 학급으로 "오늘만" 바꿔 기록할 수 있다.
   const lessons = useLessonStore((s) => s.lessons);
   const loadLessonsByDateRange = useLessonStore((s) => s.loadByDateRange);
+  const removeLesson = useLessonStore((s) => s.removeLesson);
   useEffect(() => {
     loadLessonsByDateRange(date, date);
   }, [date, loadLessonsByDateRange]);
 
-  const tempLesson = !regularKlass
-    ? lessons.find((l) => l.date === date && l.period === period)
-    : null;
+  const overrideLesson = lessons.find((l) => l.date === date && l.period === period);
+  const isCancelled = overrideLesson?.status === "취소";
+  const savedSubstituteId =
+    overrideLesson && !isCancelled && overrideLesson.classId !== regularKlass?.id
+      ? overrideLesson.classId
+      : null;
+
   const [tempClassId, setTempClassId] = useState("");
+  const [substituting, setSubstituting] = useState(!regularKlass);
   const autoFilledRef = useRef(false);
   useEffect(() => {
-    if (tempLesson && !autoFilledRef.current) {
-      setTempClassId(tempLesson.classId);
+    if (savedSubstituteId && !autoFilledRef.current) {
+      setTempClassId(savedSubstituteId);
+      setSubstituting(true);
       autoFilledRef.current = true;
     }
-  }, [tempLesson]);
+  }, [savedSubstituteId]);
 
-  const klass =
-    regularKlass ?? (tempClassId ? classes.find((c) => c.id === tempClassId) ?? null : null);
-  const isTemp = !regularKlass && !!klass;
+  const klass = substituting
+    ? tempClassId
+      ? classes.find((c) => c.id === tempClassId) ?? null
+      : null
+    : regularKlass;
+  const isTemp = substituting && !!klass && klass.id !== regularKlass?.id;
+
+  const cancelSubstitute = async () => {
+    if (overrideLesson && savedSubstituteId) {
+      await removeLesson(overrideLesson.id);
+    }
+    setTempClassId("");
+    setSubstituting(false);
+  };
 
   return (
     <>
@@ -516,27 +564,50 @@ function SidePanel({
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {!regularKlass && (
+          {substituting ? (
             <div className="space-y-1.5">
               <p className="text-xs text-muted-foreground">
-                정규 시간표엔 없는 시간이에요. 교체·대체 수업이라면 학급을 선택해 이 날짜에만
-                기록하세요 (정규 시간표는 바뀌지 않습니다).
+                {regularKlass
+                  ? `오늘만 다른 학급으로 교체합니다. 정규 시간표(${regularKlass.grade}-${regularKlass.classNumber})는 그대로 유지돼요.`
+                  : "정규 시간표엔 없는 시간이에요. 교체·대체 수업이라면 학급을 선택해 이 날짜에만 기록하세요 (정규 시간표는 바뀌지 않습니다)."}
               </p>
-              <Select value={tempClassId} onValueChange={setTempClassId}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="학급 선택 (교체·대체 수업)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {classes
-                    .filter((c) => !c.archived)
-                    .map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.grade}-{c.classNumber} {c.homeroom ? "(담임)" : `(${c.subject})`}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={tempClassId} onValueChange={setTempClassId}>
+                  <SelectTrigger className="h-8 text-xs flex-1">
+                    <SelectValue placeholder="학급 선택 (교체·대체 수업)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classes
+                      .filter((c) => !c.archived)
+                      .map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.grade}-{c.classNumber} {c.homeroom ? "(담임)" : `(${c.subject})`}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {regularKlass && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 text-xs shrink-0"
+                    onClick={cancelSubstitute}
+                  >
+                    정규 수업으로
+                  </Button>
+                )}
+              </div>
             </div>
+          ) : (
+            regularKlass && (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline"
+                onClick={() => setSubstituting(true)}
+              >
+                🔄 오늘만 다른 학급으로 교체
+              </button>
+            )
           )}
           {klass && (
             <>
@@ -551,7 +622,7 @@ function SidePanel({
                   </span>
                   {isTemp && (
                     <Badge variant="outline" className="ml-2 text-[10px] align-middle">
-                      🔄 임시(교체·대체)
+                      🔄 교체·대체
                     </Badge>
                   )}
                 </button>
@@ -563,7 +634,7 @@ function SidePanel({
                   진도 전체보기
                 </Button>
               </div>
-              {slot?.room && (
+              {!isTemp && slot?.room && (
                 <div className="text-xs text-muted-foreground">
                   교실: {slot.room}
                 </div>
