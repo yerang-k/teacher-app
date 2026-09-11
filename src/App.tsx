@@ -15,6 +15,7 @@ import ClassManagementPage from "./pages/ClassManagementPage";
 import AIReportPage from "./pages/AIReportPage";
 import TimetablePage from "./pages/TimetablePage";
 import AssessmentPage from "./pages/AssessmentPage";
+import MemosPage from "./pages/MemosPage";
 import BackupPage from "./pages/BackupPage";
 import {
   useClassStore,
@@ -36,6 +37,7 @@ function Router() {
       <Route path="/ai-report" component={AIReportPage} />
       <Route path="/timetable" component={TimetablePage} />
       <Route path="/assessment" component={AssessmentPage} />
+      <Route path="/memos" component={MemosPage} />
       <Route path="/backup" component={BackupPage} />
       <Route path="/settings" component={ClassManagementPage} />
       <Route path="/404" component={NotFound} />

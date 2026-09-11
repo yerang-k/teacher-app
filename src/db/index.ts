@@ -12,6 +12,7 @@ import type {
   Assessment,
   AssessmentRecord,
   Curriculum,
+  Memo,
 } from '@/types';
 
 /**
@@ -33,6 +34,7 @@ export class TeacherDB extends Dexie {
   assessments!: Table<Assessment, string>;
   assessmentRecords!: Table<AssessmentRecord, string>;
   curricula!: Table<Curriculum, string>;
+  memos!: Table<Memo, string>;
   constructor() {
     super('TeacherAppDB');
 
@@ -66,6 +68,10 @@ export class TeacherDB extends Dexie {
     this.version(4).stores({
       curricula: 'id',
     });
+    // v5: 회의록·메모 테이블 추가
+    this.version(5).stores({
+      memos: 'id, category, date, createdAt',
+    });
   }
 
   /**
@@ -87,6 +93,7 @@ export class TeacherDB extends Dexie {
         this.assessments,
         this.assessmentRecords,
         this.curricula,
+        this.memos,
       ],
       async () => {
         await Promise.all([
@@ -102,6 +109,7 @@ export class TeacherDB extends Dexie {
           this.assessments.clear(),
           this.assessmentRecords.clear(),
           this.curricula.clear(),
+          this.memos.clear(),
         ]);
       }
     );

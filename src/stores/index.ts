@@ -9,3 +9,4 @@ export { useSettingsStore } from './settingsStore';
 export { useTimetableStore } from './timetableStore';
 export { useAssessmentStore } from './assessmentStore';
 export { useCurriculumStore } from './curriculumStore';
+export { useMemoStore } from './memoStore';
