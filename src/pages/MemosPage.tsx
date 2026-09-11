@@ -75,6 +75,7 @@ export default function MemosPage() {
   }, [loadAll]);
 
   const [open, setOpen] = useState(false);
+  const [penOpen, setPenOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [category, setCategory] = useState<MemoCategory>("회의록");
   const [title, setTitle] = useState("");
@@ -94,6 +95,20 @@ export default function MemosPage() {
 
   const openNew = () => {
     resetForm();
+    setOpen(true);
+  };
+
+  // S펜 필기 → PNG를 첨부로 변환하고 작성창을 연다.
+  const attachHandwriting = (dataUrl: string) => {
+    const att: MemoAttachment = {
+      id: uid(),
+      name: `손글씨-${todayKey()}.png`,
+      mime: "image/png",
+      dataUrl,
+      addedAt: Date.now(),
+    };
+    setPenOpen(false);
+    resetForm({ category: "메모", title: "손글씨 메모", attachments: [att] });
     setOpen(true);
   };
 
@@ -193,7 +208,12 @@ export default function MemosPage() {
             회의 기록과 메모를 남기고, 삼성노트 등에서 필기한 PDF·이미지를 첨부하세요.
           </p>
         </div>
-        <Button onClick={openNew}>+ 새로 작성</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setPenOpen(true)}>
+            ✏️ 손글씨
+          </Button>
+          <Button onClick={openNew}>+ 새로 작성</Button>
+        </div>
       </div>
 
       {memos.length === 0 ? (
@@ -368,6 +388,209 @@ export default function MemosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <HandwritingDialog open={penOpen} onOpenChange={setPenOpen} onSave={attachHandwriting} />
     </div>
+  );
+}
+
+const PEN_COLORS = ["#1e3050", "#2563eb", "#dc2626", "#111827"];
+
+/** S펜/마우스로 바로 필기하는 캔버스. 저장 시 PNG data URL을 넘긴다. */
+function HandwritingDialog({
+  open,
+  onOpenChange,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onSave: (dataUrl: string) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const last = useRef<{ x: number; y: number } | null>(null);
+  const penSeen = useRef(false);
+  const undoStack = useRef<ImageData[]>([]);
+  const [color, setColor] = useState(PEN_COLORS[0]);
+  const [erasing, setErasing] = useState(false);
+  const [empty, setEmpty] = useState(true);
+
+  const ctxOf = () => canvasRef.current?.getContext("2d") ?? null;
+
+  // 다이얼로그가 열리면 캔버스를 표시 크기에 맞춰 초기화(흰 배경)
+  useEffect(() => {
+    if (!open) return;
+    const id = requestAnimationFrame(() => {
+      const cv = canvasRef.current;
+      if (!cv) return;
+      const rect = cv.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      cv.width = Math.round(rect.width * dpr);
+      cv.height = Math.round(rect.height * dpr);
+      const ctx = cv.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+      undoStack.current = [];
+      setEmpty(true);
+      setErasing(false);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [open]);
+
+  const posOf = (e: React.PointerEvent) => {
+    const cv = canvasRef.current!;
+    const r = cv.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+
+  const pushUndo = () => {
+    const cv = canvasRef.current;
+    const ctx = ctxOf();
+    if (!cv || !ctx) return;
+    try {
+      undoStack.current.push(ctx.getImageData(0, 0, cv.width, cv.height));
+      if (undoStack.current.length > 15) undoStack.current.shift();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === "pen") penSeen.current = true;
+    if (e.pointerType === "touch" && penSeen.current) return; // 펜 사용 중이면 손바닥(터치) 무시
+    e.preventDefault();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    pushUndo();
+    drawing.current = true;
+    last.current = posOf(e);
+    // 점 찍기(짧은 탭)
+    strokeTo(posOf(e), e.pressure || 0.5, true);
+    setEmpty(false);
+  };
+
+  const strokeTo = (p: { x: number; y: number }, pressure: number, dot = false) => {
+    const ctx = ctxOf();
+    if (!ctx) return;
+    const base = erasing ? 16 : 2.2;
+    const w = erasing ? base : base * (0.5 + (pressure || 0.5) * 1.8);
+    ctx.strokeStyle = erasing ? "#ffffff" : color;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    const from = last.current ?? p;
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(dot ? p.x + 0.01 : p.x, dot ? p.y + 0.01 : p.y);
+    ctx.stroke();
+    last.current = p;
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!drawing.current) return;
+    if (e.pointerType === "touch" && penSeen.current) return;
+    e.preventDefault();
+    strokeTo(posOf(e), e.pressure);
+  };
+
+  const endStroke = () => {
+    drawing.current = false;
+    last.current = null;
+  };
+
+  const undo = () => {
+    const ctx = ctxOf();
+    const snap = undoStack.current.pop();
+    if (ctx && snap) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.putImageData(snap, 0, 0);
+      ctx.restore();
+    }
+    setEmpty(undoStack.current.length === 0);
+  };
+
+  const clearAll = () => {
+    const cv = canvasRef.current;
+    const ctx = ctxOf();
+    if (!cv || !ctx) return;
+    pushUndo();
+    const rect = cv.getBoundingClientRect();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+    setEmpty(true);
+  };
+
+  const save = () => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    onSave(cv.toDataURL("image/png"));
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>손글씨 필기</DialogTitle>
+          <DialogDescription className="text-xs">
+            S펜(또는 마우스)으로 바로 필기하세요. 저장하면 이미지로 메모에 첨부됩니다.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {PEN_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => {
+                setColor(c);
+                setErasing(false);
+              }}
+              className={`h-7 w-7 rounded-full border-2 ${
+                !erasing && color === c ? "border-foreground" : "border-transparent"
+              }`}
+              style={{ backgroundColor: c }}
+              aria-label={`색상 ${c}`}
+            />
+          ))}
+          <Button
+            type="button"
+            size="sm"
+            variant={erasing ? "default" : "outline"}
+            className="h-8 text-xs"
+            onClick={() => setErasing((v) => !v)}
+          >
+            지우개
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={undo}>
+            되돌리기
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={clearAll}>
+            전체 지우기
+          </Button>
+        </div>
+
+        <canvas
+          ref={canvasRef}
+          className="w-full rounded border bg-white touch-none"
+          style={{ height: "58vh", cursor: "crosshair" }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endStroke}
+          onPointerLeave={endStroke}
+          onPointerCancel={endStroke}
+        />
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            취소
+          </Button>
+          <Button onClick={save} disabled={empty}>
+            메모에 첨부
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
