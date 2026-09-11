@@ -419,7 +419,7 @@ function Row({
               isSelected
                 ? "bg-primary text-primary-foreground border-primary"
                 : isCancelled
-                ? "bg-muted/30 border-dashed opacity-70 hover:bg-muted/50"
+                ? "bg-slate-200 text-slate-500 border-slate-300 border-dashed hover:bg-slate-300"
                 : subKlass
                 ? "bg-amber-50 border-amber-300 border-dashed hover:bg-amber-100"
                 : klass
@@ -510,6 +510,8 @@ function SidePanel({
   const lessons = useLessonStore((s) => s.lessons);
   const loadLessonsByDateRange = useLessonStore((s) => s.loadByDateRange);
   const removeLesson = useLessonStore((s) => s.removeLesson);
+  const addLesson = useLessonStore((s) => s.addLesson);
+  const updateLesson = useLessonStore((s) => s.updateLesson);
   useEffect(() => {
     loadLessonsByDateRange(date, date);
   }, [date, loadLessonsByDateRange]);
@@ -545,6 +547,39 @@ function SidePanel({
     }
     setTempClassId("");
     setSubstituting(false);
+  };
+
+  // 오늘만 이 정규 수업을 휴강(취소) 처리. 진도가 미리 없어도 바로 가능하다.
+  // 진도 기록이 이미 있으면 상태만 "취소"로 바꾸고, 없으면 취소 표시용 빈 기록을 만든다.
+  const cancelToday = async () => {
+    if (!regularKlass) return;
+    if (!window.confirm(`${dayLabel} ${period}교시 ${regularKlass.grade}-${regularKlass.classNumber} 수업을 오늘만 휴강 처리할까요? (정규 시간표는 그대로 유지됩니다)`))
+      return;
+    if (overrideLesson) {
+      await updateLesson(overrideLesson.id, { status: "취소" });
+    } else {
+      await addLesson({
+        classId: regularKlass.id,
+        date,
+        period,
+        unit: "",
+        topic: "",
+        status: "취소",
+      });
+    }
+    await loadLessonsByDateRange(date, date);
+  };
+
+  // 휴강 취소 → 원래 정규 수업으로 복원. 진도 내용이 있으면 상태만 되돌리고(자료 보존),
+  // 취소 표시용 빈 기록이면 통째로 삭제한다.
+  const restoreToday = async () => {
+    if (!overrideLesson) return;
+    if (overrideLesson.unit || overrideLesson.topic) {
+      await updateLesson(overrideLesson.id, { status: "예정" });
+    } else {
+      await removeLesson(overrideLesson.id);
+    }
+    await loadLessonsByDateRange(date, date);
   };
 
   return (
@@ -598,15 +633,38 @@ function SidePanel({
                 )}
               </div>
             </div>
+          ) : isCancelled ? (
+            <div className="flex items-center justify-between gap-2 rounded bg-slate-100 px-2.5 py-2">
+              <span className="text-xs text-slate-600">
+                🚫 오늘 이 수업은 휴강(취소) 처리됨
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs shrink-0"
+                onClick={restoreToday}
+              >
+                휴강 취소
+              </Button>
+            </div>
           ) : (
             regularKlass && (
-              <button
-                type="button"
-                className="text-xs text-muted-foreground underline"
-                onClick={() => setSubstituting(true)}
-              >
-                🔄 오늘만 다른 학급으로 교체
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline"
+                  onClick={() => setSubstituting(true)}
+                >
+                  🔄 오늘만 다른 학급으로 교체
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-rose-600 underline"
+                  onClick={cancelToday}
+                >
+                  🗑️ 오늘만 삭제(휴강)
+                </button>
+              </div>
             )
           )}
           {klass && (
