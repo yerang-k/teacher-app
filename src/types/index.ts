@@ -244,3 +244,25 @@ export interface AppSettings {
   aiApiKey?: string;        // 로컬에만 저장
   updatedAt: number;
 }
+
+/** 회의록·메모에 붙는 첨부(삼성노트 등에서 내보낸 PDF/이미지). base64 data URL로 저장해 백업/동기화와 호환. */
+export interface MemoAttachment {
+  id: string;
+  name: string;
+  mime: string;       // 예: 'application/pdf', 'image/png'
+  dataUrl: string;    // data:...;base64,...
+  addedAt: number;
+}
+
+export type MemoCategory = '회의록' | '메모';
+
+export interface Memo {
+  id: string;
+  category: MemoCategory;
+  title: string;
+  body: string;               // 텍스트 내용
+  date: string;               // YYYY-MM-DD
+  attachments: MemoAttachment[];
+  createdAt: number;
+  updatedAt: number;
+}
