@@ -75,7 +75,6 @@ export default function MemosPage() {
   }, [loadAll]);
 
   const [open, setOpen] = useState(false);
-  const [penOpen, setPenOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [category, setCategory] = useState<MemoCategory>("회의록");
   const [title, setTitle] = useState("");
@@ -95,20 +94,6 @@ export default function MemosPage() {
 
   const openNew = () => {
     resetForm();
-    setOpen(true);
-  };
-
-  // S펜 필기 → PNG를 첨부로 변환하고 작성창을 연다.
-  const attachHandwriting = (dataUrl: string) => {
-    const att: MemoAttachment = {
-      id: uid(),
-      name: `손글씨-${todayKey()}.png`,
-      mime: "image/png",
-      dataUrl,
-      addedAt: Date.now(),
-    };
-    setPenOpen(false);
-    resetForm({ category: "메모", title: "손글씨 메모", attachments: [att] });
     setOpen(true);
   };
 
@@ -208,12 +193,7 @@ export default function MemosPage() {
             회의 기록과 메모를 남기고, 삼성노트 등에서 필기한 PDF·이미지를 첨부하세요.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setPenOpen(true)}>
-            ✏️ 손글씨
-          </Button>
-          <Button onClick={openNew}>+ 새로 작성</Button>
-        </div>
+        <Button onClick={openNew}>+ 새로 작성</Button>
       </div>
 
       {memos.length === 0 ? (
@@ -259,30 +239,10 @@ export default function MemosPage() {
                   <p className="text-sm whitespace-pre-wrap break-keep text-foreground/90">{m.body}</p>
                 )}
                 {m.attachments.length > 0 && (
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {m.attachments.map((a) =>
-                      a.mime.startsWith("image/") ? (
-                        <button
-                          key={a.id}
-                          type="button"
-                          onClick={() => openAttachment(a)}
-                          className="border rounded overflow-hidden hover:opacity-90"
-                          title={a.name}
-                        >
-                          <img src={a.dataUrl} alt={a.name} className="h-24 w-auto object-cover" />
-                        </button>
-                      ) : (
-                        <button
-                          key={a.id}
-                          type="button"
-                          onClick={() => openAttachment(a)}
-                          className="flex items-center gap-1.5 border rounded px-2.5 py-1.5 text-xs hover:bg-accent"
-                          title={a.name}
-                        >
-                          📄 <span className="max-w-[160px] truncate">{a.name}</span>
-                        </button>
-                      )
-                    )}
+                  <div className="flex flex-wrap gap-3 pt-1">
+                    {m.attachments.map((a) => (
+                      <AttachmentTile key={a.id} att={a} onOpen={() => openAttachment(a)} />
+                    ))}
                   </div>
                 )}
               </CardContent>
@@ -388,209 +348,80 @@ export default function MemosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <HandwritingDialog open={penOpen} onOpenChange={setPenOpen} onSave={attachHandwriting} />
     </div>
   );
 }
 
-const PEN_COLORS = ["#1e3050", "#2563eb", "#dc2626", "#111827"];
-
-/** S펜/마우스로 바로 필기하는 캔버스. 저장 시 PNG data URL을 넘긴다. */
-function HandwritingDialog({
-  open,
-  onOpenChange,
-  onSave,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  onSave: (dataUrl: string) => void;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const drawing = useRef(false);
-  const last = useRef<{ x: number; y: number } | null>(null);
-  const penSeen = useRef(false);
-  const undoStack = useRef<ImageData[]>([]);
-  const [color, setColor] = useState(PEN_COLORS[0]);
-  const [erasing, setErasing] = useState(false);
-  const [empty, setEmpty] = useState(true);
-
-  const ctxOf = () => canvasRef.current?.getContext("2d") ?? null;
-
-  // 다이얼로그가 열리면 캔버스를 표시 크기에 맞춰 초기화(흰 배경)
-  useEffect(() => {
-    if (!open) return;
-    const id = requestAnimationFrame(() => {
-      const cv = canvasRef.current;
-      if (!cv) return;
-      const rect = cv.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      cv.width = Math.round(rect.width * dpr);
-      cv.height = Math.round(rect.height * dpr);
-      const ctx = cv.getContext("2d");
-      if (!ctx) return;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, rect.width, rect.height);
-      undoStack.current = [];
-      setEmpty(true);
-      setErasing(false);
-    });
-    return () => cancelAnimationFrame(id);
-  }, [open]);
-
-  const posOf = (e: React.PointerEvent) => {
-    const cv = canvasRef.current!;
-    const r = cv.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
-  };
-
-  const pushUndo = () => {
-    const cv = canvasRef.current;
-    const ctx = ctxOf();
-    if (!cv || !ctx) return;
-    try {
-      undoStack.current.push(ctx.getImageData(0, 0, cv.width, cv.height));
-      if (undoStack.current.length > 15) undoStack.current.shift();
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (e.pointerType === "pen") penSeen.current = true;
-    if (e.pointerType === "touch" && penSeen.current) return; // 펜 사용 중이면 손바닥(터치) 무시
-    e.preventDefault();
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-    pushUndo();
-    drawing.current = true;
-    last.current = posOf(e);
-    // 점 찍기(짧은 탭)
-    strokeTo(posOf(e), e.pressure || 0.5, true);
-    setEmpty(false);
-  };
-
-  const strokeTo = (p: { x: number; y: number }, pressure: number, dot = false) => {
-    const ctx = ctxOf();
-    if (!ctx) return;
-    const base = erasing ? 16 : 2.2;
-    const w = erasing ? base : base * (0.5 + (pressure || 0.5) * 1.8);
-    ctx.strokeStyle = erasing ? "#ffffff" : color;
-    ctx.lineWidth = w;
-    ctx.beginPath();
-    const from = last.current ?? p;
-    ctx.moveTo(from.x, from.y);
-    ctx.lineTo(dot ? p.x + 0.01 : p.x, dot ? p.y + 0.01 : p.y);
-    ctx.stroke();
-    last.current = p;
-  };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!drawing.current) return;
-    if (e.pointerType === "touch" && penSeen.current) return;
-    e.preventDefault();
-    strokeTo(posOf(e), e.pressure);
-  };
-
-  const endStroke = () => {
-    drawing.current = false;
-    last.current = null;
-  };
-
-  const undo = () => {
-    const ctx = ctxOf();
-    const snap = undoStack.current.pop();
-    if (ctx && snap) {
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.putImageData(snap, 0, 0);
-      ctx.restore();
-    }
-    setEmpty(undoStack.current.length === 0);
-  };
-
-  const clearAll = () => {
-    const cv = canvasRef.current;
-    const ctx = ctxOf();
-    if (!cv || !ctx) return;
-    pushUndo();
-    const rect = cv.getBoundingClientRect();
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, rect.width, rect.height);
-    setEmpty(true);
-  };
-
-  const save = () => {
-    const cv = canvasRef.current;
-    if (!cv) return;
-    onSave(cv.toDataURL("image/png"));
-  };
-
+/** 첨부를 삼성노트처럼 썸네일 타일로 표시. 이미지는 그대로, PDF는 첫 페이지를 렌더. */
+function AttachmentTile({ att, onOpen }: { att: MemoAttachment; onOpen: () => void }) {
+  const isImage = att.mime.startsWith("image/");
+  const isPdf = att.mime === "application/pdf" || att.name.toLowerCase().endsWith(".pdf");
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>손글씨 필기</DialogTitle>
-          <DialogDescription className="text-xs">
-            S펜(또는 마우스)으로 바로 필기하세요. 저장하면 이미지로 메모에 첨부됩니다.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {PEN_COLORS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => {
-                setColor(c);
-                setErasing(false);
-              }}
-              className={`h-7 w-7 rounded-full border-2 ${
-                !erasing && color === c ? "border-foreground" : "border-transparent"
-              }`}
-              style={{ backgroundColor: c }}
-              aria-label={`색상 ${c}`}
-            />
-          ))}
-          <Button
-            type="button"
-            size="sm"
-            variant={erasing ? "default" : "outline"}
-            className="h-8 text-xs"
-            onClick={() => setErasing((v) => !v)}
-          >
-            지우개
-          </Button>
-          <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={undo}>
-            되돌리기
-          </Button>
-          <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={clearAll}>
-            전체 지우기
-          </Button>
-        </div>
-
-        <canvas
-          ref={canvasRef}
-          className="w-full rounded border bg-white touch-none"
-          style={{ height: "58vh", cursor: "crosshair" }}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={endStroke}
-          onPointerLeave={endStroke}
-          onPointerCancel={endStroke}
-        />
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            취소
-          </Button>
-          <Button onClick={save} disabled={empty}>
-            메모에 첨부
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <button
+      type="button"
+      onClick={onOpen}
+      title={att.name}
+      className="w-36 overflow-hidden rounded-lg border bg-card text-left transition-shadow hover:shadow-md"
+    >
+      <div className="flex h-44 w-full items-center justify-center overflow-hidden bg-slate-50">
+        {isImage ? (
+          <img src={att.dataUrl} alt={att.name} className="h-full w-full object-cover" />
+        ) : isPdf ? (
+          <PdfThumbnail dataUrl={att.dataUrl} />
+        ) : (
+          <span className="text-4xl">📄</span>
+        )}
+      </div>
+      <div className="flex items-center gap-1 border-t px-2 py-1.5 text-xs">
+        <span>{isPdf ? "📄" : isImage ? "🖼️" : "📎"}</span>
+        <span className="truncate">{att.name}</span>
+      </div>
+    </button>
   );
+}
+
+let pdfWorkerReady = false;
+
+/** PDF 첫 페이지를 이미지로 렌더해 썸네일로 보여준다. pdfjs는 필요할 때만 동적 로드. */
+function PdfThumbnail({ dataUrl }: { dataUrl: string }) {
+  const [thumb, setThumb] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const pdfjs = await import("pdfjs-dist");
+        if (!pdfWorkerReady) {
+          const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
+          pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+          pdfWorkerReady = true;
+        }
+        const b64 = dataUrl.split(",")[1] ?? "";
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+        const page = await pdf.getPage(1);
+        const base = page.getViewport({ scale: 1 });
+        const vp = page.getViewport({ scale: Math.min(2, 300 / base.width) });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(vp.width);
+        canvas.height = Math.ceil(vp.height);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("no ctx");
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        if (!cancelled) setThumb(canvas.toDataURL("image/png"));
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dataUrl]);
+
+  if (failed) return <span className="text-4xl">📄</span>;
+  if (!thumb) return <span className="text-xs text-muted-foreground">미리보기 생성 중…</span>;
+  return <img src={thumb} alt="PDF 미리보기" className="h-full w-full object-cover object-top" />;
 }
