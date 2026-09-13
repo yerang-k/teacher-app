@@ -54,15 +54,12 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
   const loadTasks = useTaskStore((s) => s.loadAll);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
+      // 1) 로컬(IndexedDB) 데이터만으로 화면을 즉시 띄운다 — 네트워크(구글 드라이브) 대기 없음
       try {
         await seedIfEmpty();
-        // 스토어 적재 전에 클라우드와 맞춰야 화면이 처음부터 최신 데이터로 뜹니다
-        const sync = await autoSyncOnLaunch();
         await Promise.all([loadSettings(), loadClasses(), loadTasks()]);
-        if (sync === "pulled") {
-          toast.success("다른 기기의 최신 기록을 불러왔습니다.");
-        }
       } catch (e) {
         console.error("앱 초기화 실패:", e);
       } finally {
@@ -70,7 +67,23 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
         enableAutoSync();
         setReady(true);
       }
+
+      // 2) 클라우드 동기화는 백그라운드에서 (화면 렌더를 막지 않는다).
+      //    Apps Script 콜드 스타트가 느려도 앱은 이미 로컬 데이터로 떠 있다.
+      try {
+        const sync = await autoSyncOnLaunch();
+        if (!cancelled && sync === "pulled") {
+          // 다른 기기의 최신 기록을 받아왔으면 스토어를 다시 적재해 화면을 갱신
+          await Promise.all([loadSettings(), loadClasses(), loadTasks()]);
+          toast.success("다른 기기의 최신 기록을 불러왔습니다.");
+        }
+      } catch (e) {
+        console.error("백그라운드 동기화 실패:", e);
+      }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [loadSettings, loadClasses, loadTasks]);
 
   if (!ready) {
