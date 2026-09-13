@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useMemoStore } from "@/stores";
-import { uid } from "@/db";
+import { uid, db, runWithoutChangeEvents } from "@/db";
 import { todayKey } from "@/lib/dateUtils";
 import type { Memo, MemoCategory, MemoAttachment } from "@/types";
 
@@ -79,6 +79,7 @@ export default function MemosPage() {
   const [body, setBody] = useState("");
   const [attachments, setAttachments] = useState<MemoAttachment[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+  const backupFileRef = useRef<HTMLInputElement>(null);
 
   const resetForm = (preset?: Partial<{ category: MemoCategory; title: string; attachments: MemoAttachment[] }>) => {
     setEditingId(null);
@@ -149,6 +150,52 @@ export default function MemosPage() {
     toast.success("삭제했습니다.");
   };
 
+  // 회의록·메모만 따로 파일로 백업 (첨부 PDF/이미지까지 포함, 자체 완결 JSON).
+  const exportMemos = () => {
+    if (memos.length === 0) {
+      toast.error("백업할 회의록·메모가 없습니다.");
+      return;
+    }
+    const backup = {
+      type: "teacher-app-memos",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      memos,
+    };
+    const blob = new Blob([JSON.stringify(backup)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `회의록메모-백업-${todayKey()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(`회의록·메모 ${memos.length}건을 백업 파일로 저장했습니다.`);
+  };
+
+  // 백업 파일에서 회의록·메모 불러오기 (기존 것은 두고 병합, id 같으면 갱신).
+  const importMemos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (backupFileRef.current) backupFileRef.current.value = "";
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      const list: unknown = Array.isArray(parsed) ? parsed : parsed?.memos;
+      if (!Array.isArray(list)) throw new Error("형식 오류");
+      const valid = (list as Memo[]).filter(
+        (m) => m && typeof m.id === "string" && typeof m.title === "string"
+      );
+      if (valid.length === 0) throw new Error("회의록이 없음");
+      // 메모는 클라우드 동기화 대상이 아니므로 변경 알림 없이 바로 저장
+      await runWithoutChangeEvents(() => db.memos.bulkPut(valid));
+      await loadAll();
+      toast.success(`회의록·메모 ${valid.length}건을 불러왔습니다.`);
+    } catch {
+      toast.error("올바른 회의록·메모 백업 파일이 아닙니다.");
+    }
+  };
+
   // 삼성노트 등에서 '공유'로 넘어온 파일 받기 (설치형 앱 + 안드로이드).
   // 서비스워커가 shared-inbox 캐시에 넣어두면 여기서 꺼내 새 메모 작성창을 연다.
   useEffect(() => {
@@ -190,7 +237,22 @@ export default function MemosPage() {
             회의 기록과 메모를 남기고, 삼성노트 등에서 필기한 PDF·이미지를 첨부하세요.
           </p>
         </div>
-        <Button onClick={openNew}>+ 새로 작성</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportMemos}>
+            ⬇ 백업
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => backupFileRef.current?.click()}>
+            ⬆ 불러오기
+          </Button>
+          <input
+            ref={backupFileRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={importMemos}
+          />
+          <Button onClick={openNew}>+ 새로 작성</Button>
+        </div>
       </div>
 
       {memos.length === 0 ? (
