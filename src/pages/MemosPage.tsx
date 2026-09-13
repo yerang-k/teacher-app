@@ -55,13 +55,10 @@ function openAttachment(att: MemoAttachment) {
   }
 }
 
-const fmtDate = (d: string) =>
-  new Date(d + "T00:00:00").toLocaleDateString("ko-KR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-  });
+const fmtDateShort = (d: string) => {
+  const dt = new Date(d + "T00:00:00");
+  return `${dt.getMonth() + 1}/${dt.getDate()}`;
+};
 
 export default function MemosPage() {
   const memos = useMemoStore((s) => s.memos);
@@ -207,47 +204,85 @@ export default function MemosPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {memos.map((m) => (
-            <Card key={m.id}>
-              <CardContent className="py-4 space-y-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Badge variant={m.category === "회의록" ? "default" : "outline"} className="text-[10px]">
-                        {m.category}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">{fmtDate(m.date)}</span>
-                    </div>
-                    <h2 className="font-semibold mt-1 break-keep">{m.title}</h2>
+        <div
+          className="grid gap-3"
+          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}
+        >
+          {memos.map((m) => {
+            const first = m.attachments[0];
+            const extra = m.attachments.length - 1;
+            const firstIsImage = !!first && first.mime.startsWith("image/");
+            const firstIsPdf =
+              !!first &&
+              (first.mime === "application/pdf" || first.name.toLowerCase().endsWith(".pdf"));
+            return (
+              <div key={m.id} className="flex flex-col overflow-hidden rounded-lg border bg-card">
+                {/* 썸네일: 첫 첨부(이미지/PDF), 없으면 본문 미리보기 */}
+                <button
+                  type="button"
+                  onClick={() => (first ? openAttachment(first) : openEdit(m))}
+                  title={first ? first.name : m.title}
+                  className="relative flex h-40 w-full items-center justify-center overflow-hidden bg-slate-50 hover:opacity-95"
+                >
+                  {firstIsImage ? (
+                    <img src={first.dataUrl} alt={first.name} className="h-full w-full object-cover" />
+                  ) : firstIsPdf ? (
+                    <PdfThumbnail dataUrl={first.dataUrl} />
+                  ) : m.body ? (
+                    <p className="p-2 text-left text-[11px] leading-snug whitespace-pre-wrap break-keep text-muted-foreground">
+                      {m.body}
+                    </p>
+                  ) : (
+                    <span className="text-3xl">📝</span>
+                  )}
+                  {extra > 0 && (
+                    <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
+                      +{extra}
+                    </span>
+                  )}
+                </button>
+
+                {/* 정보 + 수정/삭제 */}
+                <div className="flex flex-1 flex-col gap-1 p-2">
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant={m.category === "회의록" ? "default" : "outline"} className="text-[10px]">
+                      {m.category}
+                    </Badge>
+                    <span className="text-[11px] text-muted-foreground">{fmtDateShort(m.date)}</span>
                   </div>
-                  <div className="flex gap-1 shrink-0">
-                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => openEdit(m)}>
+                  <h2
+                    className="text-sm font-semibold leading-tight break-keep"
+                    style={{
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {m.title}
+                  </h2>
+                  <div className="mt-auto flex gap-1 pt-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 flex-1 text-xs"
+                      onClick={() => openEdit(m)}
+                    >
                       수정
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 text-xs text-rose-600 hover:text-rose-700"
+                      className="h-7 flex-1 text-xs text-rose-600 hover:text-rose-700"
                       onClick={() => del(m)}
                     >
                       삭제
                     </Button>
                   </div>
                 </div>
-                {m.body && (
-                  <p className="text-sm whitespace-pre-wrap break-keep text-foreground/90">{m.body}</p>
-                )}
-                {m.attachments.length > 0 && (
-                  <div className="flex flex-wrap gap-3 pt-1">
-                    {m.attachments.map((a) => (
-                      <AttachmentTile key={a.id} att={a} onOpen={() => openAttachment(a)} />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -349,34 +384,6 @@ export default function MemosPage() {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-/** 첨부를 삼성노트처럼 썸네일 타일로 표시. 이미지는 그대로, PDF는 첫 페이지를 렌더. */
-function AttachmentTile({ att, onOpen }: { att: MemoAttachment; onOpen: () => void }) {
-  const isImage = att.mime.startsWith("image/");
-  const isPdf = att.mime === "application/pdf" || att.name.toLowerCase().endsWith(".pdf");
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      title={att.name}
-      className="w-36 overflow-hidden rounded-lg border bg-card text-left transition-shadow hover:shadow-md"
-    >
-      <div className="flex h-44 w-full items-center justify-center overflow-hidden bg-slate-50">
-        {isImage ? (
-          <img src={att.dataUrl} alt={att.name} className="h-full w-full object-cover" />
-        ) : isPdf ? (
-          <PdfThumbnail dataUrl={att.dataUrl} />
-        ) : (
-          <span className="text-4xl">📄</span>
-        )}
-      </div>
-      <div className="flex items-center gap-1 border-t px-2 py-1.5 text-xs">
-        <span>{isPdf ? "📄" : isImage ? "🖼️" : "📎"}</span>
-        <span className="truncate">{att.name}</span>
-      </div>
-    </button>
   );
 }
 
