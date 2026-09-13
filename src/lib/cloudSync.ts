@@ -73,7 +73,14 @@ function cacheBust(url: string): string {
   return url + (url.includes("?") ? "&" : "?") + "t=" + Date.now();
 }
 
-/** API 키는 "이 컴퓨터에만 저장" 약속이 있으므로 클라우드로 내보내지 않습니다. */
+/**
+ * 클라우드로 내보내지 않을 항목을 제거합니다.
+ * - aiApiKey: "이 컴퓨터에만 저장" 약속.
+ * - memos: 회의록·메모의 첨부(PDF/이미지 base64)가 커서 동기화 데이터를 키우고
+ *   Apps Script 동기화를 느리게/실패하게 만들었다. 기기 로컬에만 보관한다.
+ *   (pull은 payload에 없는 테이블은 건드리지 않으므로 로컬 메모는 유지된다.
+ *    메모 백업이 필요하면 백업/복원 탭의 파일 내보내기를 쓰면 된다.)
+ */
 function stripLocalOnlyFields(backup: BackupFile): BackupFile {
   const settings = (backup.data.settings as Array<Record<string, unknown>> | undefined)?.map(
     (row) => {
@@ -82,10 +89,9 @@ function stripLocalOnlyFields(backup: BackupFile): BackupFile {
       return copy;
     }
   );
-  return {
-    ...backup,
-    data: { ...backup.data, ...(settings ? { settings } : {}) },
-  };
+  const data: Record<string, unknown[]> = { ...backup.data, ...(settings ? { settings } : {}) };
+  delete data.memos;
+  return { ...backup, data };
 }
 
 export async function pushNow(): Promise<string> {
@@ -164,8 +170,9 @@ export async function autoSyncOnLaunch(): Promise<LaunchSyncResult> {
     );
     return "conflict";
   } catch (e) {
+    // 켤 때 자동 동기화는 백그라운드로 돌아가므로, 실패해도 빨간 에러 토스트로
+    // 매번 방해하지 않는다. (동기화 상태는 백업/복원 탭에서 확인 가능)
     console.error("클라우드 동기화 확인 실패:", e);
-    toast.error(`클라우드 동기화 확인 실패: ${(e as Error).message}`);
     return "off";
   }
 }
