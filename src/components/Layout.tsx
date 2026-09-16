@@ -6,11 +6,11 @@ const MENU = [
   { href: "/", label: "홈", icon: "🏠" },
   { href: "/lessons", label: "수업·진도", icon: "📚" },
   { href: "/timetable", label: "시간표", icon: "🗓️" },
-  { href: "/school-sheet", label: "학교 일정", icon: "📅" },
   { href: "/assessment", label: "수행평가", icon: "📊" },
   { href: "/attendance", label: "출결", icon: "✓" },
   { href: "/behavior", label: "행동특성", icon: "📝" },
   { href: "/tasks", label: "업무", icon: "📋" },
+  { href: "/school-sheet", label: "학교 일정", icon: "🏫" },
   { href: "/memos", label: "회의록·메모", icon: "📓" },
   { href: "/ai-report", label: "AI 보고서", icon: "🤖" },
   { href: "/backup", label: "백업/복원", icon: "💾" },
@@ -32,12 +32,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           메뉴만 스크롤시켜 저작권이 항상 바닥에 붙어 잘리지 않게 한다.
           본문은 ml-56으로 사이드바 폭만큼 밀어 겹치지 않게 한다. */}
       <aside className="fixed inset-y-0 left-0 z-20 w-56 border-r bg-muted/30 flex flex-col">
-        <div className="p-4 pb-3 border-b shrink-0">
-          <div className="font-bold text-lg">교사 도우미</div>
-          <div className="text-xs text-muted-foreground">
-            수업·업무 관리 앱
-          </div>
-        </div>
+        <Link href="/">
+          <a className="block p-4 pb-3 border-b shrink-0 hover:bg-accent transition-colors">
+            <div className="font-bold text-lg">교사 도우미</div>
+            <div className="text-xs text-muted-foreground">
+              수업·업무 관리 앱
+            </div>
+          </a>
+        </Link>
         <nav className="flex-1 overflow-y-auto p-4 flex flex-col gap-1 min-h-0">
           {MENU.map((m) => {
             const isActive =
