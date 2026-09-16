@@ -234,6 +234,13 @@ export interface AssessmentRecord {
   createdAt: number;
   updatedAt: number;
 }
+/** '학교 일정' 탭에 등록하는 구글시트 하나 */
+export interface ScheduleSheetLink {
+  id: string;
+  name: string;
+  url: string; // 원본 링크(edit/공유 링크 등). 보여줄 때 preview 임베드 형식으로 변환.
+}
+
 export interface AppSettings {
   id: 'singleton';
   currentYear: number;
@@ -242,7 +249,9 @@ export interface AppSettings {
   schoolName?: string;
   theme: 'light' | 'dark' | 'system';
   aiApiKey?: string;        // 로컬에만 저장
-  scheduleSheetUrl?: string; // 학교 일정 구글시트 원본 링크
+  /** @deprecated scheduleSheets로 대체. 예전 단일 링크 — 있으면 최초 1회 마이그레이션용으로만 읽음. */
+  scheduleSheetUrl?: string;
+  scheduleSheets?: ScheduleSheetLink[]; // 학교 일정 탭에 등록된 구글시트 목록
   updatedAt: number;
 }
 
