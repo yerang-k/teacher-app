@@ -242,6 +242,7 @@ export interface AppSettings {
   schoolName?: string;
   theme: 'light' | 'dark' | 'system';
   aiApiKey?: string;        // 로컬에만 저장
+  scheduleSheetUrl?: string; // 학교 일정 구글시트 원본 링크
   updatedAt: number;
 }
 
