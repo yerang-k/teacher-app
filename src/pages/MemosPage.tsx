@@ -236,7 +236,7 @@ export default function MemosPage() {
           setOpen(true);
           toast.success("삼성노트에서 받은 필기를 담았습니다. 제목·분류를 정하고 저장하세요.");
         } else {
-          toast.error(`공유는 됐지만 받은 파일이 없습니다. (수신 내용: ${info || "없음"}) '첨부'로 직접 올려 주세요.`);
+          toast.error(`공유는 됐지만 받은 파일이 없습니다. (${info || "SW 구버전: 진단정보 없음"}) '첨부'로 직접 올려 주세요.`);
         }
       } catch (e) {
         toast.error(`공유 파일 처리 실패: ${e instanceof Error ? e.message : e}`);
