@@ -81,12 +81,12 @@ export default function MemosPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const backupFileRef = useRef<HTMLInputElement>(null);
 
-  const resetForm = (preset?: Partial<{ category: MemoCategory; title: string; attachments: MemoAttachment[] }>) => {
+  const resetForm = (preset?: Partial<{ category: MemoCategory; title: string; body: string; attachments: MemoAttachment[] }>) => {
     setEditingId(null);
     setCategory(preset?.category ?? "회의록");
     setTitle(preset?.title ?? "");
     setDate(todayKey());
-    setBody("");
+    setBody(preset?.body ?? "");
     setAttachments(preset?.attachments ?? []);
   };
 
@@ -206,9 +206,18 @@ export default function MemosPage() {
         const cache = await caches.open("shared-inbox");
         const keys = await cache.keys();
         const atts: MemoAttachment[] = [];
+        let sharedTitle = "";
+        let sharedText = "";
         for (const req of keys) {
           const res = await cache.match(req);
           if (!res) continue;
+          if (req.url.endsWith("/__shared_text__")) {
+            const t = await res.json();
+            sharedTitle = t.title || "";
+            sharedText = t.text || "";
+            await cache.delete(req);
+            continue;
+          }
           const blob = await res.blob();
           const name = decodeURIComponent(res.headers.get("x-filename") || "삼성노트 필기");
           const dataUrl = await fileToDataUrl(new File([blob], name, { type: blob.type }));
@@ -216,10 +225,10 @@ export default function MemosPage() {
           await cache.delete(req);
         }
         window.history.replaceState({}, "", "/memos");
-        if (atts.length) {
-          resetForm({ title: "삼성노트 필기", attachments: atts });
+        if (atts.length || sharedText) {
+          resetForm({ title: sharedTitle || "삼성노트 필기", body: sharedText, attachments: atts });
           setOpen(true);
-          toast.success("삼성노트에서 받은 필기를 첨부했습니다. 제목·분류를 정하고 저장하세요.");
+          toast.success("삼성노트에서 받은 필기를 담았습니다. 제목·분류를 정하고 저장하세요.");
         }
       } catch {
         /* 공유 수신 실패는 조용히 무시 (수동 첨부로 대체 가능) */
