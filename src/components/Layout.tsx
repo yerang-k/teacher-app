@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import pkg from "../../package.json";
 import { useTaskStore } from "@/stores";
 import { getSyncUrl } from "@/lib/cloudSync";
 
@@ -66,7 +67,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="shrink-0 border-t p-4 text-xs text-muted-foreground space-y-1">
-          <div>v2.0 · {storageLabel}</div>
+          <div>v{pkg.version} · {storageLabel}</div>
           <div>교사 도우미 &copy; 2026 KIMYERANG.</div>
           <div className="break-keep">
             본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는
