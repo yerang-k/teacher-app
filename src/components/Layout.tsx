@@ -1,7 +1,8 @@
 import { Link, useLocation } from "wouter";
 import pkg from "../../package.json";
 import { useTaskStore } from "@/stores";
-import { getSyncUrl } from "@/lib/cloudSync";
+import { getSyncUrl, getLastSyncedAt, hasPendingChanges } from "@/lib/cloudSync";
+import { useEffect, useState } from "react";
 
 const MENU = [
   { href: "/", label: "홈", icon: "🏠" },
@@ -21,8 +22,22 @@ const MENU = [
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const overdueCount = useTaskStore((s) => s.overdue().length);
-  // 구글 드라이브 동기화 주소가 설정돼 있으면 드라이브에, 없으면 이 기기에만 저장됨
-  const storageLabel = getSyncUrl() ? "구글 드라이브 동기화" : "이 기기에 저장";
+  // 동기화 상태 문구: 주소 미설정 → 이 기기에만 저장 / 변경 대기 → 대기 중 / 그 외 → 마지막 동기화 시각
+  // (localStorage 값이라 화면이 스스로 갱신되지 않으므로 3초마다 다시 읽는다)
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => tick((n) => n + 1), 3000);
+    return () => clearInterval(t);
+  }, []);
+  let storageLabel = "이 기기에 저장";
+  if (getSyncUrl()) {
+    const last = getLastSyncedAt();
+    const d = last ? new Date(last) : null;
+    const when = d && !isNaN(d.getTime())
+      ? ` · ${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+      : "";
+    storageLabel = hasPendingChanges() ? "드라이브 동기화 대기 중" : `드라이브 동기화됨${when}`;
+  }
 
   return (
     <div className="min-h-screen">
