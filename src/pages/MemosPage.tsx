@@ -79,6 +79,7 @@ export default function MemosPage() {
   const [body, setBody] = useState("");
   const [attachments, setAttachments] = useState<MemoAttachment[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+  const quickRef = useRef<HTMLInputElement>(null);
   const backupFileRef = useRef<HTMLInputElement>(null);
 
   const resetForm = (preset?: Partial<{ category: MemoCategory; title: string; body: string; attachments: MemoAttachment[] }>) => {
@@ -105,9 +106,9 @@ export default function MemosPage() {
     setOpen(true);
   };
 
-  const addFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+  const filesToAttachments = async (files: FileList | null) => {
     const next: MemoAttachment[] = [];
+    if (!files) return next;
     for (const f of Array.from(files)) {
       if (f.size > MAX_ATTACH_BYTES) {
         toast.error(`${f.name}은(는) 너무 큽니다 (최대 8MB). 삼성노트에서 페이지를 나눠 내보내 주세요.`);
@@ -121,8 +122,22 @@ export default function MemosPage() {
         addedAt: Date.now(),
       });
     }
+    return next;
+  };
+
+  const addFiles = async (files: FileList | null) => {
+    const next = await filesToAttachments(files);
     if (next.length) setAttachments((prev) => [...prev, ...next]);
     if (fileRef.current) fileRef.current.value = "";
+  };
+
+  // 메모 화면에서 바로 파일을 골라 새 메모로 만든다(삼성노트 공유가 안 될 때의 대체 경로).
+  const quickImport = async (files: FileList | null) => {
+    const next = await filesToAttachments(files);
+    if (quickRef.current) quickRef.current.value = "";
+    if (!next.length) return;
+    resetForm({ title: next[0].name.replace(/\.[^.]+$/, ""), attachments: next });
+    setOpen(true);
   };
 
   const removeAttachment = (id: string) =>
@@ -255,6 +270,17 @@ export default function MemosPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => quickRef.current?.click()}>
+            📎 필기 가져오기
+          </Button>
+          <input
+            ref={quickRef}
+            type="file"
+            accept="image/*,application/pdf"
+            multiple
+            hidden
+            onChange={(e) => quickImport(e.target.files)}
+          />
           <Button variant="outline" size="sm" onClick={exportMemos}>
             ⬆ 백업
           </Button>
