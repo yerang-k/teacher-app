@@ -43,7 +43,7 @@ async function handleShare(request) {
       );
     }
     return Response.redirect("/memos?shared=1", 303);
-  } catch {
-    return Response.redirect("/memos", 303);
+  } catch (e) {
+    return Response.redirect("/memos?shared=error&msg=" + encodeURIComponent(String(e && e.message || e)), 303);
   }
 }
