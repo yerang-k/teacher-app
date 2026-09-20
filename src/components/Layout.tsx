@@ -29,14 +29,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const t = window.setInterval(() => tick((n) => n + 1), 3000);
     return () => clearInterval(t);
   }, []);
-  let storageLabel = "이 기기에 저장";
+  let storageLabel = "기기에 저장";
   if (getSyncUrl()) {
     const last = getLastSyncedAt();
     const d = last ? new Date(last) : null;
     const when = d && !isNaN(d.getTime())
-      ? ` · ${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+      ? ` ${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
       : "";
-    storageLabel = hasPendingChanges() ? "드라이브 동기화 대기 중" : `드라이브 동기화됨${when}`;
+    storageLabel = hasPendingChanges() ? "동기화 대기 중" : `동기화됨${when}`;
   }
 
   return (
@@ -82,7 +82,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="shrink-0 border-t p-4 text-xs text-muted-foreground space-y-1">
-          <div>v{pkg.version} · {storageLabel}</div>
+          <div className="whitespace-nowrap">v{pkg.version} · {storageLabel}</div>
           <div>교사 도우미 &copy; 2026 KIMYERANG.</div>
           <div className="break-keep">
             본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는
