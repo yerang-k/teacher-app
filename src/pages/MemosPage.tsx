@@ -200,7 +200,12 @@ export default function MemosPage() {
   // 서비스워커가 shared-inbox 캐시에 넣어두면 여기서 꺼내 새 메모 작성창을 연다.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (!params.has("shared") || !("caches" in window)) return;
+    if (!params.has("shared")) return;
+    if (params.get("shared") === "error" || !("caches" in window)) {
+      toast.error(`공유 수신 실패: ${params.get("msg") || "캐시를 쓸 수 없습니다"}`);
+      window.history.replaceState({}, "", "/memos");
+      return;
+    }
     (async () => {
       try {
         const cache = await caches.open("shared-inbox");
@@ -229,9 +234,11 @@ export default function MemosPage() {
           resetForm({ title: sharedTitle || "삼성노트 필기", body: sharedText, attachments: atts });
           setOpen(true);
           toast.success("삼성노트에서 받은 필기를 담았습니다. 제목·분류를 정하고 저장하세요.");
+        } else {
+          toast.error("공유는 됐지만 받은 파일이 없습니다. PDF·이미지로 다시 공유하거나 '첨부'로 직접 올려 주세요.");
         }
-      } catch {
-        /* 공유 수신 실패는 조용히 무시 (수동 첨부로 대체 가능) */
+      } catch (e) {
+        toast.error(`공유 파일 처리 실패: ${e instanceof Error ? e.message : e}`);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
