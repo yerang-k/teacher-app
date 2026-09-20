@@ -251,7 +251,11 @@ export default function MemosPage() {
           setOpen(true);
           toast.success("삼성노트에서 받은 필기를 담았습니다. 제목·분류를 정하고 저장하세요.");
         } else {
-          toast.error(`공유는 됐지만 받은 파일이 없습니다. (${info || "진단정보 없음(서비스워커 구버전)"}) '첨부'로 직접 올려 주세요.`);
+          // 진단: 앱이 실제로 어떤 브라우저 엔진·기기에서 도는지 함께 표시
+          const ua = navigator.userAgent;
+          const env = [ua.match(/Android [\d.]+/)?.[0], ua.match(/(SamsungBrowser|Chrome|Edg)\/[\d.]+/)?.[0],
+            window.matchMedia("(display-mode: standalone)").matches ? "설치앱" : "브라우저탭"].filter(Boolean).join(", ");
+          toast.error(`공유는 됐지만 받은 파일이 없습니다. (${info || "진단정보 없음(서비스워커 구버전)"}; ${env}) 위쪽 '📎 필기 가져오기'를 이용해 주세요.`, { duration: 20000 });
         }
       } catch (e) {
         toast.error(`공유 파일 처리 실패: ${e instanceof Error ? e.message : e}`);
