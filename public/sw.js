@@ -17,6 +17,8 @@ async function handleShare(request) {
   try {
     const form = await request.formData();
     const files = form.getAll("file").filter((f) => f && f.size > 0);
+    // 삼성노트 '텍스트로 공유'는 파일 없이 title/text만 온다 → 함께 보관
+    const text = [form.get("title"), form.get("text")].filter((v) => typeof v === "string" && v.trim());
     const cache = await caches.open("shared-inbox");
     // 이전에 남은 공유 파일 정리
     for (const req of await cache.keys()) await cache.delete(req);
@@ -29,6 +31,14 @@ async function handleShare(request) {
             "content-type": f.type || "application/octet-stream",
             "x-filename": encodeURIComponent(f.name || "삼성노트 필기"),
           },
+        })
+      );
+    }
+    if (text.length) {
+      await cache.put(
+        new Request("/__shared_text__"),
+        new Response(JSON.stringify({ title: text.length > 1 ? text[0] : "", text: text[text.length - 1] }), {
+          headers: { "content-type": "application/json" },
         })
       );
     }
