@@ -16,7 +16,11 @@ self.addEventListener("fetch", (event) => {
 async function handleShare(request) {
   try {
     const form = await request.formData();
-    const files = form.getAll("file").filter((f) => f && f.size > 0);
+    // 필드 이름과 무관하게 넘어온 모든 파일을 받는다(삼성노트가 다른 이름으로 보내는 경우 대비)
+    const entries = [...form.entries()];
+    const files = entries.map(([, v]) => v).filter((v) => typeof v !== "string" && v.size > 0);
+    // 진단용: 실제로 무엇이 왔는지 (필드명:형식:크기)
+    const info = entries.map(([k, v]) => (typeof v === "string" ? `${k}=텍스트${v.length}자` : `${k}=${v.type || "?"}/${v.size}B`)).join(", ");
     // 삼성노트 '텍스트로 공유'는 파일 없이 title/text만 온다 → 함께 보관
     const text = [form.get("title"), form.get("text")].filter((v) => typeof v === "string" && v.trim());
     const cache = await caches.open("shared-inbox");
@@ -42,7 +46,7 @@ async function handleShare(request) {
         })
       );
     }
-    return Response.redirect("/memos?shared=1", 303);
+    return Response.redirect("/memos?shared=1&info=" + encodeURIComponent(info), 303);
   } catch (e) {
     return Response.redirect("/memos?shared=error&msg=" + encodeURIComponent(String(e && e.message || e)), 303);
   }
