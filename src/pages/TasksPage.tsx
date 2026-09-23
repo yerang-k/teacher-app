@@ -25,15 +25,18 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
-import { useTaskStore } from "@/stores";
+import { useTaskStore, useEventStore } from "@/stores";
 import { todayKey, daysBetween } from "@/lib/dateUtils";
 import { linkifyText } from "@/lib/linkify";
-import TaskCalendar from "@/components/TaskCalendar";
+import TaskCalendar, { SCOPE_BAR } from "@/components/TaskCalendar";
 import type {
   SchoolTask,
   TaskCategory,
   TaskPriority,
   TaskStatus,
+  SchoolEvent,
+  EventCategory,
+  EventScope,
 } from "@/types";
 
 const CATEGORIES: TaskCategory[] = [
@@ -70,6 +73,15 @@ const CATEGORY_COLOR: Record<TaskCategory, string> = {
   교과: "bg-cyan-50 text-cyan-700 border-cyan-200",
   행정: "bg-slate-50 text-slate-700 border-slate-200",
   연수: "bg-amber-50 text-amber-700 border-amber-200",
+  기타: "bg-zinc-50 text-zinc-700 border-zinc-200",
+};
+
+const EVENT_CATEGORIES: EventCategory[] = ["학사일정", "교내행사", "방학", "대회·체육행사", "기타"];
+const EVENT_CATEGORY_BADGE: Record<EventCategory, string> = {
+  학사일정: "bg-violet-50 text-violet-700 border-violet-200",
+  교내행사: "bg-teal-50 text-teal-700 border-teal-200",
+  방학: "bg-sky-50 text-sky-700 border-sky-200",
+  "대회·체육행사": "bg-orange-50 text-orange-700 border-orange-200",
   기타: "bg-zinc-50 text-zinc-700 border-zinc-200",
 };
 
@@ -135,6 +147,21 @@ export default function TasksPage() {
   const toggleChecklist = useTaskStore((s) => s.toggleChecklistItem);
   const addChecklistItem = useTaskStore((s) => s.addChecklistItem);
 
+  const loadAllEvents = useEventStore((s) => s.loadAll);
+  const eventFilters = useEventStore((s) => s.filters);
+  const setEventFilters = useEventStore((s) => s.setFilters);
+  const clearEventFilters = useEventStore((s) => s.clearFilters);
+  const filteredEvents = useEventStore((s) => s.filtered);
+  const eventsByScope = useEventStore((s) => s.byScope);
+  const addEvent = useEventStore((s) => s.addEvent);
+  const updateEvent = useEventStore((s) => s.updateEvent);
+  const removeEvent = useEventStore((s) => s.removeEvent);
+  const toggleEventChecklist = useEventStore((s) => s.toggleChecklistItem);
+  const addEventChecklistItem = useEventStore((s) => s.addChecklistItem);
+
+  const [itemType, setItemType] = useState<"task" | "event" | "personal">("task");
+  const itemScope: EventScope = itemType === "personal" ? "personal" : "school";
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<SchoolTask> | null>(null);
   const [checklistInput, setChecklistInput] = useState("");
@@ -142,9 +169,14 @@ export default function TasksPage() {
   const [showSource, setShowSource] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
 
+  const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<Partial<SchoolEvent> | null>(null);
+  const [eventChecklistInput, setEventChecklistInput] = useState("");
+
   useEffect(() => {
     loadAll();
-  }, [loadAll]);
+    loadAllEvents();
+  }, [loadAll, loadAllEvents]);
 
   const openNew = () => {
     setEditing({
@@ -206,6 +238,92 @@ export default function TasksPage() {
     await removeTask(editing.id);
     setDialogOpen(false);
     setEditing(null);
+  };
+
+  const openNewEvent = () => {
+    const t = todayKey();
+    setEditingEvent({
+      title: "",
+      description: "",
+      scope: itemScope,
+      category: itemScope === "school" ? "학사일정" : undefined,
+      startDate: t,
+      endDate: t,
+      allDay: true,
+      location: "",
+    });
+    setEventDialogOpen(true);
+  };
+
+  const openEditEvent = (e: SchoolEvent) => {
+    setEditingEvent(e);
+    setEventDialogOpen(true);
+  };
+
+  const openNewEventOnDate = (dateKey: string) => {
+    setEditingEvent({
+      title: "",
+      description: "",
+      scope: itemScope,
+      category: itemScope === "school" ? "학사일정" : undefined,
+      startDate: dateKey,
+      endDate: dateKey,
+      allDay: true,
+      location: "",
+    });
+    setEventDialogOpen(true);
+  };
+
+  const handleDayClick = (dateKey: string) =>
+    itemType === "task" ? openNewOnDate(dateKey) : openNewEventOnDate(dateKey);
+
+  const saveEvent = async () => {
+    if (!editingEvent?.title?.trim()) {
+      toast.error("제목을 입력하세요.");
+      return;
+    }
+    if (!editingEvent.startDate) {
+      toast.error("시작일을 입력하세요.");
+      return;
+    }
+    const scope = editingEvent.scope ?? "school";
+    const endDate = editingEvent.endDate && editingEvent.endDate >= editingEvent.startDate
+      ? editingEvent.endDate
+      : editingEvent.startDate;
+    const label = scope === "school" ? "행사" : "개인 일정";
+    if (editingEvent.id) {
+      await updateEvent(editingEvent.id, {
+        ...editingEvent,
+        endDate,
+        category: scope === "school" ? editingEvent.category : undefined,
+      });
+      toast.success(`${label}을 수정했습니다.`);
+    } else {
+      await addEvent({
+        title: editingEvent.title!,
+        description: editingEvent.description,
+        scope,
+        category: scope === "school" ? editingEvent.category : undefined,
+        startDate: editingEvent.startDate,
+        endDate,
+        allDay: editingEvent.allDay ?? true,
+        time: editingEvent.allDay ? undefined : editingEvent.time,
+        location: editingEvent.location,
+        checklist: editingEvent.checklist,
+      });
+      toast.success(`${label}을 추가했습니다.`);
+    }
+    setEventDialogOpen(false);
+    setEditingEvent(null);
+  };
+
+  const handleDeleteEvent = async () => {
+    if (!editingEvent?.id) return;
+    const label = editingEvent.scope === "personal" ? "개인 일정" : "행사";
+    if (!confirm(`이 ${label}을 삭제할까요?`)) return;
+    await removeEvent(editingEvent.id);
+    setEventDialogOpen(false);
+    setEditingEvent(null);
   };
 
   // 필터 적용 후 마감일 섹션으로 묶기
@@ -313,16 +431,56 @@ export default function TasksPage() {
     );
   };
 
+  const calendarEvents = filteredEvents();
+  const eventView = eventsByScope(itemScope)
+    .slice()
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  const selectItemType = (t: "task" | "event" | "personal") => {
+    setItemType(t);
+    if (t !== "task") clearEventFilters();
+  };
+
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-5xl">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">업무 관리</h1>
+          <h1 className="text-2xl font-bold">업무·행사·개인일정</h1>
           <p className="text-sm text-muted-foreground">
-            마감일 기준으로 정리했어요. 처리할 일이 {activeCount}건 있습니다.
+            {itemType === "task"
+              ? `마감일 기준으로 정리했어요. 처리할 일이 ${activeCount}건 있습니다.`
+              : itemType === "event"
+              ? `학사일정·교내행사 등을 달력에 함께 표시합니다. 등록된 행사가 ${eventsByScope("school").length}건 있습니다.`
+              : `개인 용무·약속을 달력에 함께 표시합니다. 등록된 일정이 ${eventsByScope("personal").length}건 있습니다.`}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <div className="flex rounded-md border p-0.5">
+            <Button
+              variant={itemType === "task" ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2.5"
+              onClick={() => selectItemType("task")}
+            >
+              📋 업무
+            </Button>
+            <Button
+              variant={itemType === "event" ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2.5"
+              onClick={() => selectItemType("event")}
+            >
+              🎉 행사
+            </Button>
+            <Button
+              variant={itemType === "personal" ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2.5"
+              onClick={() => selectItemType("personal")}
+            >
+              🙋 개인
+            </Button>
+          </div>
           <div className="flex rounded-md border p-0.5">
             <Button
               variant={viewMode === "list" ? "default" : "ghost"}
@@ -341,13 +499,14 @@ export default function TasksPage() {
               달력
             </Button>
           </div>
-          <Button onClick={openNew} className="shrink-0">
-            + 새 업무
+          <Button onClick={itemType === "task" ? openNew : openNewEvent} className="shrink-0">
+            {itemType === "task" ? "+ 새 업무" : itemType === "event" ? "+ 새 행사" : "+ 새 일정"}
           </Button>
         </div>
       </div>
 
       {/* 필터 */}
+      {itemType === "task" ? (
       <Card>
         <CardContent className="pt-4 flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
@@ -409,15 +568,64 @@ export default function TasksPage() {
           </Button>
         </CardContent>
       </Card>
+      ) : (
+      <Card>
+        <CardContent className="pt-4 flex flex-wrap items-end gap-3">
+          {itemType === "event" && (
+          <div className="space-y-1.5">
+            <Label>분류</Label>
+            <Select
+              value={eventFilters.category ?? ""}
+              onValueChange={(v) =>
+                setEventFilters({
+                  category: (v === "all" ? undefined : (v as EventCategory)) || undefined,
+                })
+              }
+            >
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="전체" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체</SelectItem>
+                {EVENT_CATEGORIES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          )}
+          <div className="space-y-1.5 flex-1 min-w-[160px]">
+            <Label>검색</Label>
+            <Input
+              placeholder="제목·장소 검색"
+              value={eventFilters.keyword ?? ""}
+              onChange={(e) => setEventFilters({ keyword: e.target.value })}
+            />
+          </div>
+          <Button variant="ghost" onClick={clearEventFilters}>
+            초기화
+          </Button>
+        </CardContent>
+      </Card>
+      )}
 
       {viewMode === "calendar" ? (
-        <TaskCalendar tasks={view} onTaskClick={openEdit} onDayClick={openNewOnDate} />
-      ) : view.length === 0 ? (
+        <TaskCalendar
+          tasks={view}
+          events={calendarEvents}
+          onTaskClick={openEdit}
+          onEventClick={openEditEvent}
+          onDayClick={handleDayClick}
+        />
+      ) : itemType === "task" ? (
+        view.length === 0 ? (
         <div className="text-center text-muted-foreground py-16">
           <p className="text-4xl mb-2">🗒️</p>
           <p>표시할 업무가 없습니다.</p>
         </div>
-      ) : (
+        ) : (
         <div className="space-y-6">
           {GROUP_ORDER.map((key) => {
             const items = groups[key];
@@ -451,6 +659,51 @@ export default function TasksPage() {
                   </div>
                 )}
               </section>
+            );
+          })}
+        </div>
+        )
+      ) : eventView.length === 0 ? (
+        <div className="text-center text-muted-foreground py-16">
+          <p className="text-4xl mb-2">{itemType === "event" ? "🎉" : "🙋"}</p>
+          <p>{itemType === "event" ? "등록된 행사가 없습니다." : "등록된 개인 일정이 없습니다."}</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {eventView.map((e) => {
+            const checkDone = e.checklist?.filter((c) => c.done).length ?? 0;
+            const checkTotal = e.checklist?.length ?? 0;
+            const range = e.startDate === e.endDate ? e.startDate : `${e.startDate} ~ ${e.endDate}`;
+            return (
+              <button
+                key={e.id}
+                onClick={() => openEditEvent(e)}
+                className="flex w-full items-center gap-3 rounded-lg border bg-background px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
+              >
+                <span className={`shrink-0 h-2.5 w-2.5 rounded-full ${SCOPE_BAR[e.scope].split(" ")[0]}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm truncate">{e.title}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    {e.category && (
+                      <Badge className={EVENT_CATEGORY_BADGE[e.category]} variant="outline">
+                        {e.category}
+                      </Badge>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {range}
+                      {!e.allDay && e.time ? ` · ${e.time}` : ""}
+                    </span>
+                    {e.location && (
+                      <span className="text-xs text-muted-foreground">· 📍{e.location}</span>
+                    )}
+                    {checkTotal > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        ☑ {checkDone}/{checkTotal}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
             );
           })}
         </div>
@@ -694,6 +947,212 @@ export default function TasksPage() {
                 취소
               </Button>
               <Button onClick={save}>저장</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 행사/개인 일정 추가·편집 다이얼로그 */}
+      <Dialog open={eventDialogOpen} onOpenChange={setEventDialogOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editingEvent?.scope === "personal"
+                ? editingEvent?.id ? "개인 일정 수정" : "새 개인 일정"
+                : editingEvent?.id ? "행사 수정" : "새 행사"}
+            </DialogTitle>
+            <DialogDescription>
+              제목과 기간, 장소, 체크리스트를 입력하세요.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingEvent && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>제목 *</Label>
+                <Input
+                  value={editingEvent.title ?? ""}
+                  onChange={(e) =>
+                    setEditingEvent((x) => ({ ...x, title: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>메모</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="관련 안내, 유의사항 등을 자유롭게 적어두세요."
+                  value={editingEvent.description ?? ""}
+                  onChange={(e) =>
+                    setEditingEvent((x) => ({ ...x, description: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {editingEvent.scope !== "personal" && (
+                  <div className="space-y-1.5">
+                    <Label>분류</Label>
+                    <Select
+                      value={editingEvent.category}
+                      onValueChange={(v) =>
+                        setEditingEvent((x) => ({ ...x, category: v as EventCategory }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EVENT_CATEGORIES.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className={`space-y-1.5 ${editingEvent.scope === "personal" ? "col-span-2" : ""}`}>
+                  <Label>장소</Label>
+                  <Input
+                    placeholder="예) 대강당, 운동장"
+                    value={editingEvent.location ?? ""}
+                    onChange={(e) =>
+                      setEditingEvent((x) => ({ ...x, location: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label>시작일</Label>
+                  <Input
+                    type="date"
+                    value={editingEvent.startDate ?? ""}
+                    onChange={(e) =>
+                      setEditingEvent((x) => ({ ...x, startDate: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>종료일</Label>
+                  <Input
+                    type="date"
+                    value={editingEvent.endDate ?? ""}
+                    onChange={(e) =>
+                      setEditingEvent((x) => ({ ...x, endDate: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={editingEvent.allDay ?? true}
+                    onChange={(e) =>
+                      setEditingEvent((x) => ({ ...x, allDay: e.target.checked }))
+                    }
+                  />
+                  종일
+                </label>
+                {!editingEvent.allDay && (
+                  <Input
+                    type="time"
+                    className="w-32"
+                    value={editingEvent.time ?? ""}
+                    onChange={(e) =>
+                      setEditingEvent((x) => ({ ...x, time: e.target.value }))
+                    }
+                  />
+                )}
+              </div>
+
+              {/* 체크리스트 */}
+              <div className="space-y-2">
+                <Label>{editingEvent.scope === "personal" ? "할 일 체크리스트" : "준비물 체크리스트"}</Label>
+                {(editingEvent.checklist ?? []).map((c) => (
+                  <div key={c.id} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={c.done}
+                      onChange={() => {
+                        if (editingEvent.id) toggleEventChecklist(editingEvent.id, c.id);
+                        setEditingEvent((x) => ({
+                          ...x,
+                          checklist: (x?.checklist ?? []).map((ci) =>
+                            ci.id === c.id ? { ...ci, done: !ci.done } : ci
+                          ),
+                        }));
+                      }}
+                    />
+                    <span
+                      className={`text-sm flex-1 ${
+                        c.done ? "line-through text-muted-foreground" : ""
+                      }`}
+                    >
+                      {c.text}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditingEvent((x) => ({
+                          ...x,
+                          checklist: (x?.checklist ?? []).filter(
+                            (ci) => ci.id !== c.id
+                          ),
+                        }));
+                      }}
+                    >
+                      ×
+                    </Button>
+                  </div>
+                ))}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="체크리스트 항목 입력 후 Enter"
+                    value={eventChecklistInput}
+                    onChange={(e) => setEventChecklistInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (!eventChecklistInput.trim()) return;
+                        if (editingEvent.id) {
+                          addEventChecklistItem(editingEvent.id, eventChecklistInput);
+                        }
+                        setEditingEvent((x) => ({
+                          ...x,
+                          checklist: [
+                            ...(x?.checklist ?? []),
+                            {
+                              id: Math.random().toString(36).slice(2),
+                              text: eventChecklistInput,
+                              done: false,
+                            },
+                          ],
+                        }));
+                        setEventChecklistInput("");
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex justify-between sm:justify-between">
+            <div>
+              {editingEvent?.id && (
+                <Button variant="destructive" onClick={handleDeleteEvent}>
+                  삭제
+                </Button>
+              )}
+            </div>
+            <div className="space-x-2">
+              <Button variant="outline" onClick={() => setEventDialogOpen(false)}>
+                취소
+              </Button>
+              <Button onClick={saveEvent}>저장</Button>
             </div>
           </DialogFooter>
         </DialogContent>
