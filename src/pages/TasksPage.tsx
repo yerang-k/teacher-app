@@ -169,6 +169,12 @@ export default function TasksPage() {
   const [showDone, setShowDone] = useState(false);
   const [showSource, setShowSource] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [showFilters, setShowFilters] = useState(true);
+
+  const changeViewMode = (mode: "list" | "calendar") => {
+    setViewMode(mode);
+    setShowFilters(mode === "list");
+  };
 
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Partial<SchoolEvent> | null>(null);
@@ -443,7 +449,11 @@ export default function TasksPage() {
   };
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-5xl">
+    <div
+      className={`container mx-auto p-4 sm:p-6 space-y-5 ${
+        viewMode === "calendar" ? "max-w-7xl" : "max-w-5xl"
+      }`}
+    >
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">업무·행사·개인일정</h1>
@@ -487,7 +497,7 @@ export default function TasksPage() {
               variant={viewMode === "list" ? "default" : "ghost"}
               size="sm"
               className="h-7 px-2.5"
-              onClick={() => setViewMode("list")}
+              onClick={() => changeViewMode("list")}
             >
               목록
             </Button>
@@ -495,11 +505,19 @@ export default function TasksPage() {
               variant={viewMode === "calendar" ? "default" : "ghost"}
               size="sm"
               className="h-7 px-2.5"
-              onClick={() => setViewMode("calendar")}
+              onClick={() => changeViewMode("calendar")}
             >
               달력
             </Button>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2.5 text-xs text-muted-foreground"
+            onClick={() => setShowFilters((v) => !v)}
+          >
+            {showFilters ? "필터 접기 ▲" : "필터 펼치기 ▼"}
+          </Button>
           <Button onClick={itemType === "task" ? openNew : openNewEvent} className="shrink-0">
             {itemType === "task" ? "+ 새 업무" : itemType === "event" ? "+ 새 행사" : "+ 새 일정"}
           </Button>
@@ -507,7 +525,8 @@ export default function TasksPage() {
       </div>
 
       {/* 필터 */}
-      {itemType === "task" ? (
+      {showFilters && (
+      itemType === "task" ? (
       <Card>
         <CardContent className="pt-4 flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
@@ -610,6 +629,7 @@ export default function TasksPage() {
           </Button>
         </CardContent>
       </Card>
+      )
       )}
 
       {viewMode === "calendar" ? (
