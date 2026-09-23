@@ -22,8 +22,8 @@ export const SCOPE_LABEL: Record<EventScope, string> = {
   personal: "개인",
 };
 
-const MAX_SHOWN = 3;
-const MAX_EVENTS_SHOWN = 2;
+const MAX_SHOWN = 4;
+const MAX_EVENTS_SHOWN = 3;
 
 interface TaskCalendarProps {
   tasks: SchoolTask[];
@@ -141,7 +141,7 @@ export default function TaskCalendar({
               <div
                 key={key}
                 onClick={() => onDayClick?.(key)}
-                className={`flex min-h-[100px] flex-col gap-1 bg-background p-1.5 ${
+                className={`flex min-h-[136px] flex-col gap-1 bg-background p-1.5 ${
                   inMonth ? "" : "opacity-40"
                 } ${onDayClick ? "cursor-pointer hover:bg-muted/40" : ""}`}
               >
