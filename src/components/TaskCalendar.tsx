@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toDateKey, todayKey } from "@/lib/dateUtils";
-import type { SchoolTask, TaskPriority } from "@/types";
+import type { SchoolTask, TaskPriority, SchoolEvent, EventScope } from "@/types";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -12,15 +12,34 @@ const PRIORITY_DOT: Record<TaskPriority, string> = {
   긴급: "bg-rose-500",
 };
 
+/** 업무/행사/개인을 달력에서 한눈에 구분하기 위한 종류별 고정 색 */
+export const SCOPE_BAR: Record<EventScope, string> = {
+  school: "bg-violet-500 text-white",
+  personal: "bg-rose-500 text-white",
+};
+export const SCOPE_LABEL: Record<EventScope, string> = {
+  school: "행사",
+  personal: "개인",
+};
+
 const MAX_SHOWN = 3;
+const MAX_EVENTS_SHOWN = 2;
 
 interface TaskCalendarProps {
   tasks: SchoolTask[];
+  events?: SchoolEvent[];
   onTaskClick: (t: SchoolTask) => void;
+  onEventClick?: (e: SchoolEvent) => void;
   onDayClick?: (dateKey: string) => void;
 }
 
-export default function TaskCalendar({ tasks, onTaskClick, onDayClick }: TaskCalendarProps) {
+export default function TaskCalendar({
+  tasks,
+  events = [],
+  onTaskClick,
+  onEventClick,
+  onDayClick,
+}: TaskCalendarProps) {
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -55,6 +74,16 @@ export default function TaskCalendar({ tasks, onTaskClick, onDayClick }: TaskCal
     const lastRow = days.slice(35, 42);
     return lastRow.every((d) => d.getMonth() !== month) ? days.slice(0, 35) : days;
   }, [cursor]);
+
+  const eventsByDate = useMemo(() => {
+    const map = new Map<string, SchoolEvent[]>();
+    for (const d of cells) {
+      const key = toDateKey(d);
+      const hits = events.filter((e) => e.startDate <= key && key <= e.endDate);
+      if (hits.length) map.set(key, hits);
+    }
+    return map;
+  }, [cells, events]);
 
   const monthLabel = `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`;
   const today = todayKey();
@@ -104,6 +133,9 @@ export default function TaskCalendar({ tasks, onTaskClick, onDayClick }: TaskCal
             const dayTasks = byDate.get(key) ?? [];
             const shown = dayTasks.slice(0, MAX_SHOWN);
             const extra = dayTasks.length - shown.length;
+            const dayEvents = eventsByDate.get(key) ?? [];
+            const shownEvents = dayEvents.slice(0, MAX_EVENTS_SHOWN);
+            const extraEvents = dayEvents.length - shownEvents.length;
             const dow = d.getDay();
             return (
               <div
@@ -127,6 +159,23 @@ export default function TaskCalendar({ tasks, onTaskClick, onDayClick }: TaskCal
                   {d.getDate()}
                 </span>
                 <div className="flex-1 space-y-0.5 overflow-hidden">
+                  {shownEvents.map((ev) => (
+                    <button
+                      key={ev.id}
+                      type="button"
+                      title={ev.title}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEventClick?.(ev);
+                      }}
+                      className={`w-full truncate rounded px-1 py-0.5 text-left text-[10px] font-medium leading-tight hover:opacity-80 ${SCOPE_BAR[ev.scope]}`}
+                    >
+                      {ev.title}
+                    </button>
+                  ))}
+                  {extraEvents > 0 && (
+                    <div className="px-1 text-[10px] text-muted-foreground">행사 +{extraEvents}개</div>
+                  )}
                   {shown.map((t) => (
                     <button
                       key={t.id}

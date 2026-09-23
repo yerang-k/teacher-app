@@ -11,7 +11,7 @@ const MENU = [
   { href: "/assessment", label: "수행평가", icon: "📊" },
   { href: "/attendance", label: "출결", icon: "✓" },
   { href: "/behavior", label: "행동특성", icon: "📝" },
-  { href: "/tasks", label: "업무", icon: "📋" },
+  { href: "/tasks", label: "업무·행사", icon: "📋" },
   { href: "/school-sheet", label: "학교 일정", icon: "🏫" },
   { href: "/memos", label: "회의록·메모", icon: "📓" },
   { href: "/ai-report", label: "AI 보고서", icon: "🤖" },

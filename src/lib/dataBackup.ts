@@ -17,6 +17,7 @@ const TABLE_KEYS = [
   "assessmentRecords",
   "curricula",
   "memos",
+  "events",
 ] as const;
 
 export interface BackupFile {

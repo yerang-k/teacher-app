@@ -10,3 +10,4 @@ export { useTimetableStore } from './timetableStore';
 export { useAssessmentStore } from './assessmentStore';
 export { useCurriculumStore } from './curriculumStore';
 export { useMemoStore } from './memoStore';
+export { useEventStore } from './eventStore';

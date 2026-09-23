@@ -160,6 +160,27 @@ export interface SchoolTask {
   sourceBody?: string;  // 메신저 원문
 }
 
+// ============ 행사 / 개인 일정 (학사일정, 교내행사, 방학, 개인 용무 등) ============
+export type EventCategory = '학사일정' | '교내행사' | '방학' | '대회·체육행사' | '기타';
+/** school = 업무 탭의 '행사', personal = '개인' 탭. 달력에서 종류별 고정 색으로 구분됨 */
+export type EventScope = 'school' | 'personal';
+
+export interface SchoolEvent {
+  id: string;
+  title: string;
+  description?: string;
+  scope: EventScope;
+  category?: EventCategory; // scope='school'일 때만 사용
+  startDate: string;       // YYYY-MM-DD
+  endDate: string;         // YYYY-MM-DD (하루짜리 행사면 startDate와 동일)
+  allDay: boolean;
+  time?: string;           // allDay=false일 때 시각 (예: "09:00")
+  location?: string;
+  checklist?: { id: string; text: string; done: boolean }[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 // ============ AI 보고서 ============
 export type ReportType =
   | '학생개별'
