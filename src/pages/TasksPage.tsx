@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { ClipboardList, CalendarDays, CircleUserRound } from "lucide-react";
 
 import { useTaskStore, useEventStore } from "@/stores";
 import { todayKey, daysBetween } from "@/lib/dateUtils";
@@ -459,26 +460,26 @@ export default function TasksPage() {
             <Button
               variant={itemType === "task" ? "default" : "ghost"}
               size="sm"
-              className="h-7 px-2.5"
+              className="h-7 px-2.5 gap-1.5"
               onClick={() => selectItemType("task")}
             >
-              📋 업무
+              <ClipboardList className="h-3.5 w-3.5" /> 업무
             </Button>
             <Button
               variant={itemType === "event" ? "default" : "ghost"}
               size="sm"
-              className="h-7 px-2.5"
+              className="h-7 px-2.5 gap-1.5"
               onClick={() => selectItemType("event")}
             >
-              🎉 행사
+              <CalendarDays className="h-3.5 w-3.5" /> 행사
             </Button>
             <Button
               variant={itemType === "personal" ? "default" : "ghost"}
               size="sm"
-              className="h-7 px-2.5"
+              className="h-7 px-2.5 gap-1.5"
               onClick={() => selectItemType("personal")}
             >
-              🙋 개인
+              <CircleUserRound className="h-3.5 w-3.5" /> 개인
             </Button>
           </div>
           <div className="flex rounded-md border p-0.5">
@@ -622,7 +623,7 @@ export default function TasksPage() {
       ) : itemType === "task" ? (
         view.length === 0 ? (
         <div className="text-center text-muted-foreground py-16">
-          <p className="text-4xl mb-2">🗒️</p>
+          <ClipboardList className="h-10 w-10 mx-auto mb-2 opacity-40" />
           <p>표시할 업무가 없습니다.</p>
         </div>
         ) : (
@@ -665,7 +666,11 @@ export default function TasksPage() {
         )
       ) : eventView.length === 0 ? (
         <div className="text-center text-muted-foreground py-16">
-          <p className="text-4xl mb-2">{itemType === "event" ? "🎉" : "🙋"}</p>
+          {itemType === "event" ? (
+            <CalendarDays className="h-10 w-10 mx-auto mb-2 opacity-40" />
+          ) : (
+            <CircleUserRound className="h-10 w-10 mx-auto mb-2 opacity-40" />
+          )}
           <p>{itemType === "event" ? "등록된 행사가 없습니다." : "등록된 개인 일정이 없습니다."}</p>
         </div>
       ) : (
