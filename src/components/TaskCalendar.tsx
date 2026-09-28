@@ -99,18 +99,16 @@ export default function TaskCalendar({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-center gap-2">
         <Button variant="outline" size="sm" onClick={goPrev}>
           ‹
         </Button>
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold">{monthLabel}</h2>
-          <Button variant="outline" size="sm" onClick={goToday}>
-            오늘
-          </Button>
-        </div>
+        <h2 className="text-lg font-semibold">{monthLabel}</h2>
         <Button variant="outline" size="sm" onClick={goNext}>
           ›
+        </Button>
+        <Button variant="outline" size="sm" onClick={goToday} className="ml-1">
+          오늘
         </Button>
       </div>
 
