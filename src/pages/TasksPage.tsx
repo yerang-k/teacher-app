@@ -29,7 +29,7 @@ import { ClipboardList, CalendarDays, CircleUserRound } from "lucide-react";
 import { useTaskStore, useEventStore } from "@/stores";
 import { todayKey, daysBetween } from "@/lib/dateUtils";
 import { linkifyText } from "@/lib/linkify";
-import TaskCalendar, { SCOPE_BAR } from "@/components/TaskCalendar";
+import TaskCalendar, { SCOPE_BAR, SCOPE_LABEL } from "@/components/TaskCalendar";
 import type {
   SchoolTask,
   TaskCategory,
@@ -705,7 +705,11 @@ export default function TasksPage() {
                 onClick={() => openEditEvent(e)}
                 className="flex w-full items-center gap-3 rounded-lg border bg-background px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
               >
-                <span className={`shrink-0 h-2.5 w-2.5 rounded-full ${SCOPE_BAR[e.scope].split(" ")[0]}`} />
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${SCOPE_BAR[e.scope]}`}
+                >
+                  {SCOPE_LABEL[e.scope]}
+                </span>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">{e.title}</div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
