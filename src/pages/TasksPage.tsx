@@ -86,6 +86,34 @@ const EVENT_CATEGORY_BADGE: Record<EventCategory, string> = {
   기타: "bg-zinc-50 text-zinc-700 border-zinc-200",
 };
 
+/** 등록/편집 다이얼로그에서 다룰 수 있는 항목 종류. school·personal은 SchoolEvent의 scope와 동일. */
+type ItemKind = "task" | EventScope;
+const KIND_LABEL: Record<ItemKind, string> = {
+  task: "업무",
+  school: "행사",
+  personal: "개인 일정",
+};
+
+const emptyTaskDraft = (dueDate = ""): Partial<SchoolTask> => ({
+  title: "",
+  description: "",
+  category: "정보부",
+  priority: "보통",
+  status: "대기",
+  dueDate,
+});
+
+const emptyEventDraft = (scope: EventScope, dateKey: string): Partial<SchoolEvent> => ({
+  title: "",
+  description: "",
+  scope,
+  category: scope === "school" ? "학사일정" : undefined,
+  startDate: dateKey,
+  endDate: dateKey,
+  allDay: true,
+  location: "",
+});
+
 // 마감일 기준 섹션 정의
 type GroupKey = "지연" | "오늘" | "이번 주" | "앞으로" | "기한 없음" | "완료";
 const GROUP_META: Record<GroupKey, { emoji: string; desc: string; accent: string }> = {
@@ -163,9 +191,13 @@ export default function TasksPage() {
   const [itemType, setItemType] = useState<"task" | "event" | "personal">("task");
   const itemScope: EventScope = itemType === "personal" ? "personal" : "school";
 
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [itemDialogOpen, setItemDialogOpen] = useState(false);
+  const [dialogKind, setDialogKind] = useState<ItemKind>("task");
+  const [originalKind, setOriginalKind] = useState<ItemKind | null>(null);
   const [editing, setEditing] = useState<Partial<SchoolTask> | null>(null);
+  const [editingEvent, setEditingEvent] = useState<Partial<SchoolEvent> | null>(null);
   const [checklistInput, setChecklistInput] = useState("");
+  const [eventChecklistInput, setEventChecklistInput] = useState("");
   const [showDone, setShowDone] = useState(false);
   const [showSource, setShowSource] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
@@ -176,161 +208,154 @@ export default function TasksPage() {
     setShowFilters(mode === "list");
   };
 
-  const [eventDialogOpen, setEventDialogOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<Partial<SchoolEvent> | null>(null);
-  const [eventChecklistInput, setEventChecklistInput] = useState("");
-
   useEffect(() => {
     loadAll();
     loadAllEvents();
   }, [loadAll, loadAllEvents]);
 
-  const openNew = () => {
-    setEditing({
-      title: "",
-      description: "",
-      category: "정보부",
-      priority: "보통",
-      status: "대기",
-      dueDate: "",
-    });
-    setDialogOpen(true);
-  };
-
-  const openEdit = (t: SchoolTask) => {
-    setEditing(t);
+  /** 다이얼로그를 특정 종류(업무/행사/개인)의 새 항목 입력 상태로 연다. */
+  const openNewItem = (kind: ItemKind, dateKey: string = todayKey()) => {
+    setEditing(emptyTaskDraft(kind === "task" ? dateKey : ""));
+    setEditingEvent(emptyEventDraft(kind === "personal" ? "personal" : "school", dateKey));
+    setDialogKind(kind);
+    setOriginalKind(null);
     setShowSource(false);
-    setDialogOpen(true);
+    setItemDialogOpen(true);
   };
 
-  const openNewOnDate = (dateKey: string) => {
-    setEditing({
-      title: "",
-      description: "",
-      category: "정보부",
-      priority: "보통",
-      status: "대기",
-      dueDate: dateKey,
-    });
-    setDialogOpen(true);
+  const openEditTask = (t: SchoolTask) => {
+    setEditing(t);
+    setEditingEvent(emptyEventDraft("school", t.dueDate || todayKey()));
+    setDialogKind("task");
+    setOriginalKind("task");
+    setShowSource(false);
+    setItemDialogOpen(true);
   };
 
-  const save = async () => {
-    if (!editing?.title?.trim()) {
-      toast.error("제목을 입력하세요.");
-      return;
-    }
-    if (editing.id) {
-      await updateTask(editing.id, editing);
-      toast.success("업무를 수정했습니다.");
-    } else {
-      await addTask({
-        title: editing.title!,
-        description: editing.description,
-        category: editing.category!,
-        priority: editing.priority!,
-        status: editing.status!,
-        dueDate: editing.dueDate || undefined,
-        checklist: editing.checklist,
-      });
-      toast.success("업무를 추가했습니다.");
-    }
-    setDialogOpen(false);
-    setEditing(null);
-  };
-
-  const handleDelete = async () => {
-    if (!editing?.id) return;
-    if (!confirm("이 업무를 삭제할까요?")) return;
-    await removeTask(editing.id);
-    setDialogOpen(false);
-    setEditing(null);
-  };
-
-  const openNewEvent = () => {
-    const t = todayKey();
-    setEditingEvent({
-      title: "",
-      description: "",
-      scope: itemScope,
-      category: itemScope === "school" ? "학사일정" : undefined,
-      startDate: t,
-      endDate: t,
-      allDay: true,
-      location: "",
-    });
-    setEventDialogOpen(true);
-  };
-
-  const openEditEvent = (e: SchoolEvent) => {
+  const openEditEventItem = (e: SchoolEvent) => {
     setEditingEvent(e);
-    setEventDialogOpen(true);
+    setEditing(emptyTaskDraft(e.endDate || e.startDate));
+    setDialogKind(e.scope);
+    setOriginalKind(e.scope);
+    setShowSource(false);
+    setItemDialogOpen(true);
   };
 
-  const openNewEventOnDate = (dateKey: string) => {
-    setEditingEvent({
-      title: "",
-      description: "",
-      scope: itemScope,
-      category: itemScope === "school" ? "학사일정" : undefined,
-      startDate: dateKey,
-      endDate: dateKey,
-      allDay: true,
-      location: "",
-    });
-    setEventDialogOpen(true);
+  const handleDayClick = (dateKey: string) => {
+    const kind: ItemKind = itemType === "task" ? "task" : itemType === "event" ? "school" : "personal";
+    openNewItem(kind, dateKey);
   };
 
-  const handleDayClick = (dateKey: string) =>
-    itemType === "task" ? openNewOnDate(dateKey) : openNewEventOnDate(dateKey);
+  /** 다이얼로그 안에서 '구분'을 바꿀 때, 공통 입력값(제목·메모·체크리스트)을 반대편 초안에도 옮겨준다. */
+  const switchDialogKind = (newKind: ItemKind) => {
+    if (newKind === dialogKind) return;
+    const commonTitle = dialogKind === "task" ? editing?.title : editingEvent?.title;
+    const commonDesc = dialogKind === "task" ? editing?.description : editingEvent?.description;
+    const commonChecklist = dialogKind === "task" ? editing?.checklist : editingEvent?.checklist;
 
-  const saveEvent = async () => {
-    if (!editingEvent?.title?.trim()) {
-      toast.error("제목을 입력하세요.");
-      return;
-    }
-    if (!editingEvent.startDate) {
-      toast.error("시작일을 입력하세요.");
-      return;
-    }
-    const scope = editingEvent.scope ?? "school";
-    const endDate = editingEvent.endDate && editingEvent.endDate >= editingEvent.startDate
-      ? editingEvent.endDate
-      : editingEvent.startDate;
-    const label = scope === "school" ? "행사" : "개인 일정";
-    if (editingEvent.id) {
-      await updateEvent(editingEvent.id, {
-        ...editingEvent,
-        endDate,
-        category: scope === "school" ? editingEvent.category : undefined,
-      });
-      toast.success(`${label}을 수정했습니다.`);
+    if (newKind === "task") {
+      setEditing((x) => ({
+        ...(x ?? emptyTaskDraft()),
+        title: commonTitle ?? x?.title ?? "",
+        description: commonDesc ?? x?.description,
+        checklist: commonChecklist ?? x?.checklist,
+      }));
     } else {
-      await addEvent({
+      setEditingEvent((x) => ({
+        ...(x ?? emptyEventDraft(newKind, todayKey())),
+        scope: newKind,
+        category: newKind === "school" ? x?.category ?? "학사일정" : undefined,
+        title: commonTitle ?? x?.title ?? "",
+        description: commonDesc ?? x?.description,
+        checklist: commonChecklist ?? x?.checklist,
+      }));
+    }
+    setDialogKind(newKind);
+  };
+
+  /** originalKind !== dialogKind면 업무↔행사/개인 간 저장소를 옮기는 '변경'으로 처리한다. */
+  const saveItem = async () => {
+    const crossStore = originalKind !== null && (originalKind === "task") !== (dialogKind === "task");
+
+    if (dialogKind === "task") {
+      if (!editing?.title?.trim()) {
+        toast.error("제목을 입력하세요.");
+        return;
+      }
+      if (!crossStore && originalKind === "task" && editing.id) {
+        await updateTask(editing.id, editing);
+        toast.success("업무를 수정했습니다.");
+      } else {
+        if (crossStore && editingEvent?.id) {
+          await removeEvent(editingEvent.id);
+        }
+        await addTask({
+          title: editing.title!,
+          description: editing.description,
+          category: editing.category ?? "기타",
+          priority: editing.priority ?? "보통",
+          status: editing.status ?? "대기",
+          dueDate: editing.dueDate || undefined,
+          checklist: editing.checklist,
+        });
+        toast.success(originalKind ? "업무로 변경했습니다." : "업무를 추가했습니다.");
+      }
+    } else {
+      if (!editingEvent?.title?.trim()) {
+        toast.error("제목을 입력하세요.");
+        return;
+      }
+      const scope: EventScope = dialogKind;
+      const startDate = editingEvent.startDate || todayKey();
+      const endDate =
+        editingEvent.endDate && editingEvent.endDate >= startDate ? editingEvent.endDate : startDate;
+      const label = KIND_LABEL[scope];
+      const payload = {
         title: editingEvent.title!,
         description: editingEvent.description,
         scope,
         category: scope === "school" ? editingEvent.category : undefined,
-        startDate: editingEvent.startDate,
+        startDate,
         endDate,
         allDay: editingEvent.allDay ?? true,
         time: editingEvent.allDay ? undefined : editingEvent.time,
         location: editingEvent.location,
         checklist: editingEvent.checklist,
-      });
-      toast.success(`${label}을 추가했습니다.`);
+      };
+      if (!crossStore && editingEvent.id) {
+        await updateEvent(editingEvent.id, payload);
+        toast.success(`${label}을 수정했습니다.`);
+      } else {
+        if (crossStore && editing?.id) {
+          await removeTask(editing.id);
+        }
+        await addEvent(payload);
+        toast.success(originalKind ? `${label}(으)로 변경했습니다.` : `${label}을 추가했습니다.`);
+      }
     }
-    setEventDialogOpen(false);
+    setItemDialogOpen(false);
+    setEditing(null);
     setEditingEvent(null);
+    setOriginalKind(null);
   };
 
-  const handleDeleteEvent = async () => {
-    if (!editingEvent?.id) return;
-    const label = editingEvent.scope === "personal" ? "개인 일정" : "행사";
-    if (!confirm(`이 ${label}을 삭제할까요?`)) return;
-    await removeEvent(editingEvent.id);
-    setEventDialogOpen(false);
+  /** 삭제는 화면에 선택된 종류(dialogKind)가 아니라 실제로 저장된 원래 항목(originalKind) 기준으로 처리한다. */
+  const handleDeleteItem = async () => {
+    if (originalKind === "task") {
+      if (!editing?.id) return;
+      if (!confirm("이 업무를 삭제할까요?")) return;
+      await removeTask(editing.id);
+    } else if (originalKind === "school" || originalKind === "personal") {
+      if (!editingEvent?.id) return;
+      if (!confirm(`이 ${KIND_LABEL[originalKind]}을 삭제할까요?`)) return;
+      await removeEvent(editingEvent.id);
+    } else {
+      return;
+    }
+    setItemDialogOpen(false);
+    setEditing(null);
     setEditingEvent(null);
+    setOriginalKind(null);
   };
 
   // 필터 적용 후 마감일 섹션으로 묶기
@@ -391,7 +416,7 @@ export default function TasksPage() {
 
         {/* 본문 (클릭 시 편집) */}
         <button
-          onClick={() => openEdit(t)}
+          onClick={() => openEditTask(t)}
           className="flex-1 min-w-0 text-left"
         >
           <div
@@ -518,7 +543,12 @@ export default function TasksPage() {
           >
             {showFilters ? "필터 접기 ▲" : "필터 펼치기 ▼"}
           </Button>
-          <Button onClick={itemType === "task" ? openNew : openNewEvent} className="shrink-0">
+          <Button
+            onClick={() =>
+              openNewItem(itemType === "task" ? "task" : itemType === "event" ? "school" : "personal")
+            }
+            className="shrink-0"
+          >
             {itemType === "task" ? "+ 새 업무" : itemType === "event" ? "+ 새 행사" : "+ 새 일정"}
           </Button>
         </div>
@@ -636,8 +666,8 @@ export default function TasksPage() {
         <TaskCalendar
           tasks={view}
           events={calendarEvents}
-          onTaskClick={openEdit}
-          onEventClick={openEditEvent}
+          onTaskClick={openEditTask}
+          onEventClick={openEditEventItem}
           onDayClick={handleDayClick}
         />
       ) : itemType === "task" ? (
@@ -702,7 +732,7 @@ export default function TasksPage() {
             return (
               <button
                 key={e.id}
-                onClick={() => openEditEvent(e)}
+                onClick={() => openEditEventItem(e)}
                 className="flex w-full items-center gap-3 rounded-lg border bg-background px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
               >
                 <span
@@ -738,300 +768,155 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* 추가/편집 다이얼로그 */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{editing?.id ? "업무 수정" : "새 업무"}</DialogTitle>
-            <DialogDescription>
-              제목과 분류, 마감일, 체크리스트를 입력하세요.
-            </DialogDescription>
-          </DialogHeader>
-
-          {editing && (
-            <div className="space-y-3">
-              {editing.source === "messenger" && (
-                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-1.5 text-sm">
-                  <div className="flex items-center gap-1.5 font-medium text-blue-800">
-                    <span>✉️</span> 메신저에서 자동 등록된 업무
-                  </div>
-                  {editing.sender && (
-                    <div className="flex gap-2">
-                      <span className="w-16 shrink-0 text-blue-700/70">발신자</span>
-                      <span className="text-slate-700">{editing.sender}</span>
-                    </div>
-                  )}
-                  {editing.receivedAt && (
-                    <div className="flex gap-2">
-                      <span className="w-16 shrink-0 text-blue-700/70">수신시각</span>
-                      <span className="text-slate-700">{editing.receivedAt}</span>
-                    </div>
-                  )}
-                  {editing.attachments && editing.attachments.length > 0 && (
-                    <div className="flex gap-2">
-                      <span className="w-16 shrink-0 text-blue-700/70">첨부</span>
-                      <div className="space-y-0.5">
-                        {editing.attachments.map((a, i) => (
-                          <div key={i} className="text-slate-700">📎 {a}</div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {editing.sourceBody && (
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => setShowSource((v) => !v)}
-                        className="text-xs text-blue-700 underline"
-                      >
-                        {showSource ? "원문 접기" : "원문 보기"}
-                      </button>
-                      {showSource && (
-                        <pre className="mt-1.5 max-h-60 overflow-auto whitespace-pre-wrap rounded border bg-white p-2 text-xs text-slate-700">
-                          {linkifyText(editing.sourceBody)}
-                        </pre>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <Label>제목 *</Label>
-                <Input
-                  value={editing.title ?? ""}
-                  onChange={(e) =>
-                    setEditing((x) => ({ ...x, title: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>
-                  {editing.source === "messenger" ? "정리 내용 / 메모" : "상세 내용"}
-                </Label>
-                <Textarea
-                  rows={4}
-                  placeholder="업무의 구체적인 내용, 준비물, 메모 등을 자유롭게 적어두세요."
-                  value={editing.description ?? ""}
-                  onChange={(e) =>
-                    setEditing((x) => ({ ...x, description: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1.5">
-                  <Label>분류</Label>
-                  <Select
-                    value={editing.category}
-                    onValueChange={(v) =>
-                      setEditing((x) => ({ ...x, category: v as TaskCategory }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>우선순위</Label>
-                  <Select
-                    value={editing.priority}
-                    onValueChange={(v) =>
-                      setEditing((x) => ({ ...x, priority: v as TaskPriority }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PRIORITIES.map((p) => (
-                        <SelectItem key={p} value={p}>
-                          {p}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>상태</Label>
-                  <Select
-                    value={editing.status}
-                    onValueChange={(v) =>
-                      setEditing((x) => ({ ...x, status: v as TaskStatus }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUSES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>마감일</Label>
-                <Input
-                  type="date"
-                  value={editing.dueDate ?? ""}
-                  onChange={(e) =>
-                    setEditing((x) => ({ ...x, dueDate: e.target.value }))
-                  }
-                />
-              </div>
-
-              {/* 체크리스트 */}
-              <div className="space-y-2">
-                <Label>체크리스트</Label>
-                {(editing.checklist ?? []).map((c) => (
-                  <div key={c.id} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={c.done}
-                      onChange={() => {
-                        if (editing.id) toggleChecklist(editing.id, c.id);
-                        setEditing((x) => ({
-                          ...x,
-                          checklist: (x?.checklist ?? []).map((ci) =>
-                            ci.id === c.id ? { ...ci, done: !ci.done } : ci
-                          ),
-                        }));
-                      }}
-                    />
-                    <span
-                      className={`text-sm flex-1 ${
-                        c.done ? "line-through text-muted-foreground" : ""
-                      }`}
-                    >
-                      {c.text}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setEditing((x) => ({
-                          ...x,
-                          checklist: (x?.checklist ?? []).filter(
-                            (ci) => ci.id !== c.id
-                          ),
-                        }));
-                      }}
-                    >
-                      ×
-                    </Button>
-                  </div>
-                ))}
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="체크리스트 항목 입력 후 Enter"
-                    value={checklistInput}
-                    onChange={(e) => setChecklistInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        if (!checklistInput.trim()) return;
-                        if (editing.id) {
-                          addChecklistItem(editing.id, checklistInput);
-                        }
-                        setEditing((x) => ({
-                          ...x,
-                          checklist: [
-                            ...(x?.checklist ?? []),
-                            {
-                              id: Math.random().toString(36).slice(2),
-                              text: checklistInput,
-                              done: false,
-                            },
-                          ],
-                        }));
-                        setChecklistInput("");
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="flex justify-between sm:justify-between">
-            <div>
-              {editing?.id && (
-                <Button variant="destructive" onClick={handleDelete}>
-                  삭제
-                </Button>
-              )}
-            </div>
-            <div className="space-x-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                취소
-              </Button>
-              <Button onClick={save}>저장</Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 행사/개인 일정 추가·편집 다이얼로그 */}
-      <Dialog open={eventDialogOpen} onOpenChange={setEventDialogOpen}>
+      {/* 추가/편집 다이얼로그: 업무·행사·개인 공통, 상단 '구분'으로 서로 전환 가능 */}
+      <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>
-              {editingEvent?.scope === "personal"
-                ? editingEvent?.id ? "개인 일정 수정" : "새 개인 일정"
-                : editingEvent?.id ? "행사 수정" : "새 행사"}
+              {originalKind ? `${KIND_LABEL[dialogKind]} 수정` : `새 ${KIND_LABEL[dialogKind]}`}
             </DialogTitle>
             <DialogDescription>
-              제목과 기간, 장소, 체크리스트를 입력하세요.
+              구분을 선택하고 제목과 세부 정보, 체크리스트를 입력하세요.
             </DialogDescription>
           </DialogHeader>
 
-          {editingEvent && (
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label>제목 *</Label>
-                <Input
-                  value={editingEvent.title ?? ""}
-                  onChange={(e) =>
-                    setEditingEvent((x) => ({ ...x, title: e.target.value }))
-                  }
-                />
+          <div className="space-y-3">
+            {/* 구분: 업무/행사/개인 전환 — 기존 항목이면 저장 시 해당 종류로 옮겨집니다 */}
+            <div className="space-y-1.5">
+              <Label>구분</Label>
+              <div className="flex rounded-md border p-0.5 w-fit">
+                <Button
+                  type="button"
+                  variant={dialogKind === "task" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-7 px-3 gap-1.5"
+                  onClick={() => switchDialogKind("task")}
+                >
+                  <ClipboardList className="h-3.5 w-3.5" /> 업무
+                </Button>
+                <Button
+                  type="button"
+                  variant={dialogKind === "school" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-7 px-3 gap-1.5"
+                  onClick={() => switchDialogKind("school")}
+                >
+                  <CalendarDays className="h-3.5 w-3.5" /> 행사
+                </Button>
+                <Button
+                  type="button"
+                  variant={dialogKind === "personal" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-7 px-3 gap-1.5"
+                  onClick={() => switchDialogKind("personal")}
+                >
+                  <CircleUserRound className="h-3.5 w-3.5" /> 개인
+                </Button>
               </div>
-              <div className="space-y-1.5">
-                <Label>메모</Label>
-                <Textarea
-                  rows={3}
-                  placeholder="관련 안내, 유의사항 등을 자유롭게 적어두세요."
-                  value={editingEvent.description ?? ""}
-                  onChange={(e) =>
-                    setEditingEvent((x) => ({ ...x, description: e.target.value }))
-                  }
-                />
+              {originalKind && originalKind !== dialogKind && (
+                <p className="text-xs text-amber-600">
+                  저장하면 {KIND_LABEL[originalKind]}에서 {KIND_LABEL[dialogKind]}(으)로 옮겨집니다.
+                </p>
+              )}
+            </div>
+
+            {dialogKind === "task" && editing?.source === "messenger" && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-1.5 text-sm">
+                <div className="flex items-center gap-1.5 font-medium text-blue-800">
+                  <span>✉️</span> 메신저에서 자동 등록된 업무
+                </div>
+                {editing.sender && (
+                  <div className="flex gap-2">
+                    <span className="w-16 shrink-0 text-blue-700/70">발신자</span>
+                    <span className="text-slate-700">{editing.sender}</span>
+                  </div>
+                )}
+                {editing.receivedAt && (
+                  <div className="flex gap-2">
+                    <span className="w-16 shrink-0 text-blue-700/70">수신시각</span>
+                    <span className="text-slate-700">{editing.receivedAt}</span>
+                  </div>
+                )}
+                {editing.attachments && editing.attachments.length > 0 && (
+                  <div className="flex gap-2">
+                    <span className="w-16 shrink-0 text-blue-700/70">첨부</span>
+                    <div className="space-y-0.5">
+                      {editing.attachments.map((a, i) => (
+                        <div key={i} className="text-slate-700">📎 {a}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {editing.sourceBody && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setShowSource((v) => !v)}
+                      className="text-xs text-blue-700 underline"
+                    >
+                      {showSource ? "원문 접기" : "원문 보기"}
+                    </button>
+                    {showSource && (
+                      <pre className="mt-1.5 max-h-60 overflow-auto whitespace-pre-wrap rounded border bg-white p-2 text-xs text-slate-700">
+                        {linkifyText(editing.sourceBody)}
+                      </pre>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {editingEvent.scope !== "personal" && (
+            )}
+
+            <div className="space-y-1.5">
+              <Label>제목 *</Label>
+              <Input
+                value={(dialogKind === "task" ? editing?.title : editingEvent?.title) ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (dialogKind === "task") setEditing((x) => ({ ...x, title: v }));
+                  else setEditingEvent((x) => ({ ...x, title: v }));
+                }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>
+                {dialogKind === "task"
+                  ? editing?.source === "messenger"
+                    ? "정리 내용 / 메모"
+                    : "상세 내용"
+                  : "메모"}
+              </Label>
+              <Textarea
+                rows={dialogKind === "task" ? 4 : 3}
+                placeholder={
+                  dialogKind === "task"
+                    ? "업무의 구체적인 내용, 준비물, 메모 등을 자유롭게 적어두세요."
+                    : "관련 안내, 유의사항 등을 자유롭게 적어두세요."
+                }
+                value={(dialogKind === "task" ? editing?.description : editingEvent?.description) ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (dialogKind === "task") setEditing((x) => ({ ...x, description: v }));
+                  else setEditingEvent((x) => ({ ...x, description: v }));
+                }}
+              />
+            </div>
+
+            {dialogKind === "task" ? (
+              <>
+                <div className="grid grid-cols-3 gap-2">
                   <div className="space-y-1.5">
                     <Label>분류</Label>
                     <Select
-                      value={editingEvent.category}
+                      value={editing?.category}
                       onValueChange={(v) =>
-                        setEditingEvent((x) => ({ ...x, category: v as EventCategory }))
+                        setEditing((x) => ({ ...x, category: v as TaskCategory }))
                       }
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {EVENT_CATEGORIES.map((c) => (
+                        {CATEGORIES.map((c) => (
                           <SelectItem key={c} value={c}>
                             {c}
                           </SelectItem>
@@ -1039,149 +924,301 @@ export default function TasksPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                )}
-                <div className={`space-y-1.5 ${editingEvent.scope === "personal" ? "col-span-2" : ""}`}>
-                  <Label>장소</Label>
-                  <Input
-                    placeholder="예) 대강당, 운동장"
-                    value={editingEvent.location ?? ""}
-                    onChange={(e) =>
-                      setEditingEvent((x) => ({ ...x, location: e.target.value }))
-                    }
-                  />
+                  <div className="space-y-1.5">
+                    <Label>우선순위</Label>
+                    <Select
+                      value={editing?.priority}
+                      onValueChange={(v) =>
+                        setEditing((x) => ({ ...x, priority: v as TaskPriority }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRIORITIES.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            {p}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>상태</Label>
+                    <Select
+                      value={editing?.status}
+                      onValueChange={(v) =>
+                        setEditing((x) => ({ ...x, status: v as TaskStatus }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUSES.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5">
-                  <Label>시작일</Label>
+                  <Label>마감일</Label>
                   <Input
                     type="date"
-                    value={editingEvent.startDate ?? ""}
+                    value={editing?.dueDate ?? ""}
                     onChange={(e) =>
-                      setEditingEvent((x) => ({ ...x, startDate: e.target.value }))
+                      setEditing((x) => ({ ...x, dueDate: e.target.value }))
                     }
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label>종료일</Label>
-                  <Input
-                    type="date"
-                    value={editingEvent.endDate ?? ""}
-                    onChange={(e) =>
-                      setEditingEvent((x) => ({ ...x, endDate: e.target.value }))
-                    }
-                  />
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={editingEvent.allDay ?? true}
-                    onChange={(e) =>
-                      setEditingEvent((x) => ({ ...x, allDay: e.target.checked }))
-                    }
-                  />
-                  종일
-                </label>
-                {!editingEvent.allDay && (
-                  <Input
-                    type="time"
-                    className="w-32"
-                    value={editingEvent.time ?? ""}
-                    onChange={(e) =>
-                      setEditingEvent((x) => ({ ...x, time: e.target.value }))
-                    }
-                  />
-                )}
-              </div>
 
-              {/* 체크리스트 */}
-              <div className="space-y-2">
-                <Label>{editingEvent.scope === "personal" ? "할 일 체크리스트" : "준비물 체크리스트"}</Label>
-                {(editingEvent.checklist ?? []).map((c) => (
-                  <div key={c.id} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={c.done}
-                      onChange={() => {
-                        if (editingEvent.id) toggleEventChecklist(editingEvent.id, c.id);
-                        setEditingEvent((x) => ({
-                          ...x,
-                          checklist: (x?.checklist ?? []).map((ci) =>
-                            ci.id === c.id ? { ...ci, done: !ci.done } : ci
-                          ),
-                        }));
+                {/* 체크리스트 */}
+                <div className="space-y-2">
+                  <Label>체크리스트</Label>
+                  {(editing?.checklist ?? []).map((c) => (
+                    <div key={c.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={c.done}
+                        onChange={() => {
+                          if (originalKind === "task" && editing?.id) {
+                            toggleChecklist(editing.id, c.id);
+                          }
+                          setEditing((x) => ({
+                            ...x,
+                            checklist: (x?.checklist ?? []).map((ci) =>
+                              ci.id === c.id ? { ...ci, done: !ci.done } : ci
+                            ),
+                          }));
+                        }}
+                      />
+                      <span
+                        className={`text-sm flex-1 ${
+                          c.done ? "line-through text-muted-foreground" : ""
+                        }`}
+                      >
+                        {c.text}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditing((x) => ({
+                            ...x,
+                            checklist: (x?.checklist ?? []).filter(
+                              (ci) => ci.id !== c.id
+                            ),
+                          }));
+                        }}
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="체크리스트 항목 입력 후 Enter"
+                      value={checklistInput}
+                      onChange={(e) => setChecklistInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (!checklistInput.trim()) return;
+                          if (originalKind === "task" && editing?.id) {
+                            addChecklistItem(editing.id, checklistInput);
+                          }
+                          setEditing((x) => ({
+                            ...x,
+                            checklist: [
+                              ...(x?.checklist ?? []),
+                              {
+                                id: Math.random().toString(36).slice(2),
+                                text: checklistInput,
+                                done: false,
+                              },
+                            ],
+                          }));
+                          setChecklistInput("");
+                        }
                       }}
                     />
-                    <span
-                      className={`text-sm flex-1 ${
-                        c.done ? "line-through text-muted-foreground" : ""
-                      }`}
-                    >
-                      {c.text}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setEditingEvent((x) => ({
-                          ...x,
-                          checklist: (x?.checklist ?? []).filter(
-                            (ci) => ci.id !== c.id
-                          ),
-                        }));
-                      }}
-                    >
-                      ×
-                    </Button>
                   </div>
-                ))}
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="체크리스트 항목 입력 후 Enter"
-                    value={eventChecklistInput}
-                    onChange={(e) => setEventChecklistInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        if (!eventChecklistInput.trim()) return;
-                        if (editingEvent.id) {
-                          addEventChecklistItem(editingEvent.id, eventChecklistInput);
-                        }
-                        setEditingEvent((x) => ({
-                          ...x,
-                          checklist: [
-                            ...(x?.checklist ?? []),
-                            {
-                              id: Math.random().toString(36).slice(2),
-                              text: eventChecklistInput,
-                              done: false,
-                            },
-                          ],
-                        }));
-                        setEventChecklistInput("");
-                      }
-                    }}
-                  />
                 </div>
-              </div>
-            </div>
-          )}
+              </>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  {dialogKind === "school" && (
+                    <div className="space-y-1.5">
+                      <Label>분류</Label>
+                      <Select
+                        value={editingEvent?.category}
+                        onValueChange={(v) =>
+                          setEditingEvent((x) => ({ ...x, category: v as EventCategory }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {EVENT_CATEGORIES.map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <div className={`space-y-1.5 ${dialogKind === "personal" ? "col-span-2" : ""}`}>
+                    <Label>장소</Label>
+                    <Input
+                      placeholder="예) 대강당, 운동장"
+                      value={editingEvent?.location ?? ""}
+                      onChange={(e) =>
+                        setEditingEvent((x) => ({ ...x, location: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label>시작일</Label>
+                    <Input
+                      type="date"
+                      value={editingEvent?.startDate ?? ""}
+                      onChange={(e) =>
+                        setEditingEvent((x) => ({ ...x, startDate: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>종료일</Label>
+                    <Input
+                      type="date"
+                      value={editingEvent?.endDate ?? ""}
+                      onChange={(e) =>
+                        setEditingEvent((x) => ({ ...x, endDate: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editingEvent?.allDay ?? true}
+                      onChange={(e) =>
+                        setEditingEvent((x) => ({ ...x, allDay: e.target.checked }))
+                      }
+                    />
+                    종일
+                  </label>
+                  {!editingEvent?.allDay && (
+                    <Input
+                      type="time"
+                      className="w-32"
+                      value={editingEvent?.time ?? ""}
+                      onChange={(e) =>
+                        setEditingEvent((x) => ({ ...x, time: e.target.value }))
+                      }
+                    />
+                  )}
+                </div>
+
+                {/* 체크리스트 */}
+                <div className="space-y-2">
+                  <Label>{dialogKind === "personal" ? "할 일 체크리스트" : "준비물 체크리스트"}</Label>
+                  {(editingEvent?.checklist ?? []).map((c) => (
+                    <div key={c.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={c.done}
+                        onChange={() => {
+                          if (originalKind === dialogKind && editingEvent?.id) {
+                            toggleEventChecklist(editingEvent.id, c.id);
+                          }
+                          setEditingEvent((x) => ({
+                            ...x,
+                            checklist: (x?.checklist ?? []).map((ci) =>
+                              ci.id === c.id ? { ...ci, done: !ci.done } : ci
+                            ),
+                          }));
+                        }}
+                      />
+                      <span
+                        className={`text-sm flex-1 ${
+                          c.done ? "line-through text-muted-foreground" : ""
+                        }`}
+                      >
+                        {c.text}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditingEvent((x) => ({
+                            ...x,
+                            checklist: (x?.checklist ?? []).filter(
+                              (ci) => ci.id !== c.id
+                            ),
+                          }));
+                        }}
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="체크리스트 항목 입력 후 Enter"
+                      value={eventChecklistInput}
+                      onChange={(e) => setEventChecklistInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (!eventChecklistInput.trim()) return;
+                          if (originalKind === dialogKind && editingEvent?.id) {
+                            addEventChecklistItem(editingEvent.id, eventChecklistInput);
+                          }
+                          setEditingEvent((x) => ({
+                            ...x,
+                            checklist: [
+                              ...(x?.checklist ?? []),
+                              {
+                                id: Math.random().toString(36).slice(2),
+                                text: eventChecklistInput,
+                                done: false,
+                              },
+                            ],
+                          }));
+                          setEventChecklistInput("");
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
 
           <DialogFooter className="flex justify-between sm:justify-between">
             <div>
-              {editingEvent?.id && (
-                <Button variant="destructive" onClick={handleDeleteEvent}>
+              {originalKind && (
+                <Button variant="destructive" onClick={handleDeleteItem}>
                   삭제
                 </Button>
               )}
             </div>
             <div className="space-x-2">
-              <Button variant="outline" onClick={() => setEventDialogOpen(false)}>
+              <Button variant="outline" onClick={() => setItemDialogOpen(false)}>
                 취소
               </Button>
-              <Button onClick={saveEvent}>저장</Button>
+              <Button onClick={saveItem}>저장</Button>
             </div>
           </DialogFooter>
         </DialogContent>
