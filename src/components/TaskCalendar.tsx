@@ -5,11 +5,12 @@ import type { SchoolTask, TaskPriority, SchoolEvent, EventScope } from "@/types"
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
-const PRIORITY_DOT: Record<TaskPriority, string> = {
-  낮음: "bg-slate-400",
-  보통: "bg-blue-500",
-  높음: "bg-amber-500",
-  긴급: "bg-rose-500",
+/** 업무를 달력에서 알약 버튼으로 표시하기 위한 우선순위별 고정 색 */
+const PRIORITY_BAR: Record<TaskPriority, string> = {
+  낮음: "bg-slate-400 text-white",
+  보통: "bg-blue-500 text-white",
+  높음: "bg-amber-500 text-white",
+  긴급: "bg-rose-500 text-white",
 };
 
 /** 업무/행사/개인을 달력에서 한눈에 구분하기 위한 종류별 고정 색 */
@@ -185,15 +186,12 @@ export default function TaskCalendar({
                         e.stopPropagation();
                         onTaskClick(t);
                       }}
-                      className={`flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight hover:opacity-80 ${
+                      className={`flex w-full items-center truncate rounded px-1 py-0.5 text-left text-[10px] font-medium leading-tight hover:opacity-80 ${
                         t.status === "완료"
                           ? "bg-slate-100 text-slate-400 line-through"
-                          : "bg-slate-100 text-slate-700"
+                          : PRIORITY_BAR[t.priority]
                       }`}
                     >
-                      <span
-                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${PRIORITY_DOT[t.priority]}`}
-                      />
                       <span className="truncate">{t.title}</span>
                     </button>
                   ))}
