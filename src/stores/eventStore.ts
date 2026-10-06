@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { db, now, uid } from '@/db';
+import { compareEventsByStartThenTime } from '@/lib/dateUtils';
 import type { SchoolEvent, EventCategory, EventScope } from '@/types';
 
 interface EventFilters {
@@ -42,7 +43,7 @@ export const useEventStore = create<EventState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const rows = await db.events.toArray();
-      rows.sort((a, b) => a.startDate.localeCompare(b.startDate));
+      rows.sort(compareEventsByStartThenTime);
       set({ events: rows, loading: false });
     } catch (e) {
       set({ error: (e as Error).message, loading: false });
@@ -83,7 +84,7 @@ export const useEventStore = create<EventState>((set, get) => ({
       updatedAt: now(),
     };
     await db.events.add(item);
-    set((s) => ({ events: [...s.events, item].sort((a, b) => a.startDate.localeCompare(b.startDate)) }));
+    set((s) => ({ events: [...s.events, item].sort(compareEventsByStartThenTime) }));
     return item.id;
   },
 
@@ -93,7 +94,7 @@ export const useEventStore = create<EventState>((set, get) => ({
     set((s) => ({
       events: s.events
         .map((e) => (e.id === id ? { ...e, ...updated } : e))
-        .sort((a, b) => a.startDate.localeCompare(b.startDate)),
+        .sort(compareEventsByStartThenTime),
     }));
   },
 

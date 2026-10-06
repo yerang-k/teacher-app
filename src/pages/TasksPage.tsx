@@ -27,7 +27,7 @@ import { toast } from "sonner";
 import { ClipboardList, CalendarDays, CircleUserRound } from "lucide-react";
 
 import { useTaskStore, useEventStore } from "@/stores";
-import { todayKey, daysBetween } from "@/lib/dateUtils";
+import { todayKey, daysBetween, compareEventsByStartThenTime } from "@/lib/dateUtils";
 import { linkifyText } from "@/lib/linkify";
 import TaskCalendar, { SCOPE_BAR, SCOPE_LABEL } from "@/components/TaskCalendar";
 import type {
@@ -466,7 +466,7 @@ export default function TasksPage() {
   const calendarEvents = filteredEvents();
   const eventView = eventsByScope(itemScope)
     .slice()
-    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+    .sort(compareEventsByStartThenTime);
 
   const selectItemType = (t: "task" | "event" | "personal") => {
     setItemType(t);

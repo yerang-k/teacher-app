@@ -52,3 +52,23 @@ export function daysBetween(from: string, to: string): number {
     (new Date(to).getTime() - new Date(from).getTime()) / (1000 * 60 * 60 * 24)
   );
 }
+
+type TimedItem = { allDay: boolean; time?: string };
+
+/** 같은 날 일정끼리 비교: 시간이 있는 일정은 빠른 순, 시간 없는(종일 포함) 일정은 맨 뒤. 같으면 0(기존 순서 유지). */
+export function compareEventsByTime(a: TimedItem, b: TimedItem): number {
+  const ta = !a.allDay && a.time ? a.time : '';
+  const tb = !b.allDay && b.time ? b.time : '';
+  if (ta === tb) return 0;
+  if (!ta) return 1;
+  if (!tb) return -1;
+  return ta < tb ? -1 : 1;
+}
+
+/** 일정 목록 정렬: 시작일 순, 같은 날이면 시간 순(시간 없는 일정은 뒤) */
+export function compareEventsByStartThenTime(
+  a: TimedItem & { startDate: string },
+  b: TimedItem & { startDate: string }
+): number {
+  return a.startDate.localeCompare(b.startDate) || compareEventsByTime(a, b);
+}

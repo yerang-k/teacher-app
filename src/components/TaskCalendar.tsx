@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { toDateKey, todayKey } from "@/lib/dateUtils";
+import { toDateKey, todayKey, compareEventsByTime } from "@/lib/dateUtils";
 import type { SchoolTask, TaskPriority, SchoolEvent, EventScope } from "@/types";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -80,7 +80,10 @@ export default function TaskCalendar({
     const map = new Map<string, SchoolEvent[]>();
     for (const d of cells) {
       const key = toDateKey(d);
-      const hits = events.filter((e) => e.startDate <= key && key <= e.endDate);
+      // 그날 안에서는 시간 순(빠른 일정이 위), 시간 없는 일정은 맨 아래
+      const hits = events
+        .filter((e) => e.startDate <= key && key <= e.endDate)
+        .sort(compareEventsByTime);
       if (hits.length) map.set(key, hits);
     }
     return map;
