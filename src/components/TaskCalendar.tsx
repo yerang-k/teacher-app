@@ -142,14 +142,18 @@ export default function TaskCalendar({
               <div
                 key={key}
                 onClick={() => onDayClick?.(key)}
-                className={`flex min-h-[136px] flex-col gap-1 bg-background p-1.5 ${
-                  inMonth ? "" : "opacity-40"
-                } ${onDayClick ? "cursor-pointer hover:bg-muted/40" : ""}`}
+                className={`flex min-h-[136px] flex-col gap-1 p-1.5 ${
+                  isToday ? "bg-emerald-100" : "bg-background"
+                } ${inMonth ? "" : "opacity-40"} ${
+                  onDayClick
+                    ? `cursor-pointer ${isToday ? "hover:bg-emerald-200" : "hover:bg-muted/40"}`
+                    : ""
+                }`}
               >
                 <span
                   className={`inline-flex h-5 w-5 items-center justify-center self-start rounded-full text-[11px] font-semibold ${
                     isToday
-                      ? "bg-primary text-primary-foreground"
+                      ? "bg-emerald-600 text-white"
                       : dow === 0
                       ? "text-rose-500"
                       : dow === 6
