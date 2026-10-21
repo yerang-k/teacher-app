@@ -11,3 +11,4 @@ export { useAssessmentStore } from './assessmentStore';
 export { useCurriculumStore } from './curriculumStore';
 export { useMemoStore } from './memoStore';
 export { useEventStore } from './eventStore';
+export { useClubStore } from './clubStore';

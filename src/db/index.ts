@@ -14,6 +14,7 @@ import type {
   Curriculum,
   Memo,
   SchoolEvent,
+  Club,
 } from '@/types';
 
 /**
@@ -37,6 +38,7 @@ export class TeacherDB extends Dexie {
   curricula!: Table<Curriculum, string>;
   memos!: Table<Memo, string>;
   events!: Table<SchoolEvent, string>;
+  clubs!: Table<Club, string>;
   constructor() {
     super('TeacherAppDB');
 
@@ -78,6 +80,10 @@ export class TeacherDB extends Dexie {
     this.version(6).stores({
       events: 'id, category, startDate, endDate, [startDate+endDate]',
     });
+    // v7: 동아리 테이블 추가
+    this.version(7).stores({
+      clubs: 'id, year',
+    });
   }
 
   /**
@@ -101,6 +107,7 @@ export class TeacherDB extends Dexie {
         this.curricula,
         this.memos,
         this.events,
+        this.clubs,
       ],
       async () => {
         await Promise.all([
@@ -118,6 +125,7 @@ export class TeacherDB extends Dexie {
           this.curricula.clear(),
           this.memos.clear(),
           this.events.clear(),
+          this.clubs.clear(),
         ]);
       }
     );

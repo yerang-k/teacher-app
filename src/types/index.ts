@@ -287,6 +287,27 @@ export interface MemoAttachment {
   addedAt: number;
 }
 
+/** 동아리 부원. 여러 학급 학생이 섞일 수 있어 등록된 Student와 별개로 자기 id를 가진다
+ *  (학생 개인 출결·보고서 집계에 동아리 기록이 섞이지 않게 하기 위함). */
+export interface ClubMember {
+  id: string;
+  name: string;
+  grade?: number;
+  classNumber?: number;
+  number?: number;
+}
+
+/** 동아리. 출결은 AttendanceRecord.classId에 동아리 id를 넣어 학급 출결과 같은 방식으로 저장한다. */
+export interface Club {
+  id: string;
+  name: string;
+  year: number;            // 학년도
+  members: ClubMember[];
+  archived?: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type MemoCategory = '회의록' | '메모';
 
 export interface Memo {

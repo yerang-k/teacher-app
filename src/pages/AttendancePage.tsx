@@ -12,7 +12,9 @@ import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -27,9 +29,20 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
-import { useClassStore, useAttendanceStore } from "@/stores";
+import { useClassStore, useAttendanceStore, useClubStore } from "@/stores";
 import { todayKey } from "@/lib/dateUtils";
+import { memberOriginLabel, sortMembers } from "@/lib/clubUtils";
+import ClubManagerDialog from "@/components/ClubManagerDialog";
 import type { AttendanceStatus } from "@/types";
+
+/** 출결 명단 한 줄. 학급 학생과 동아리 부원을 같은 방식으로 다루기 위한 공통 모양. */
+interface RosterRow {
+  id: string;
+  number: number;
+  name: string;
+  /** 동아리 부원의 원래 학년-반-번호 */
+  origin?: string;
+}
 
 const STATUS_OPTIONS: AttendanceStatus[] = [
   "출석",
@@ -78,10 +91,33 @@ export default function AttendancePage() {
   const [bulkStatus, setBulkStatus] = useState<AttendanceStatus | "">("");
   const [bulkReason, setBulkReason] = useState<string>("");
 
-  const students = useMemo(
-    () => (classId ? getStudentsByClass(classId) : []),
-    [classId, getStudentsByClass]
-  );
+  const clubs = useClubStore((s) => s.clubs);
+  const loadClubs = useClubStore((s) => s.loadAll);
+  const [clubDialogOpen, setClubDialogOpen] = useState(false);
+
+  useEffect(() => {
+    loadClubs();
+  }, [loadClubs]);
+
+  // classId는 학급 id이거나 동아리 id다. 동아리 출결도 같은 방식(classId 칸에 동아리 id)으로 저장된다.
+  const selectedClub = clubs.find((c) => c.id === classId);
+
+  const students = useMemo<RosterRow[]>(() => {
+    if (!classId) return [];
+    if (selectedClub) {
+      return sortMembers(selectedClub.members).map((m, i) => ({
+        id: m.id,
+        number: i + 1,
+        name: m.name,
+        origin: memberOriginLabel(m) || undefined,
+      }));
+    }
+    return getStudentsByClass(classId).map((s) => ({
+      id: s.id,
+      number: s.number,
+      name: s.name,
+    }));
+  }, [classId, selectedClub, getStudentsByClass]);
 
   // 학급/날짜 변경 시 기존 기록 로드 및 선택 해제
   useEffect(() => {
@@ -215,7 +251,7 @@ export default function AttendancePage() {
       <div>
         <h1 className="text-2xl font-bold">출결 관리</h1>
         <p className="text-muted-foreground">
-          학급과 날짜를 선택하고 학생별 출결을 입력하세요.
+          학급(또는 동아리)과 날짜를 선택하고 학생별 출결을 입력하세요.
         </p>
       </div>
 
@@ -226,20 +262,38 @@ export default function AttendancePage() {
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-4">
           <div className="space-y-1.5">
-            <Label>학급</Label>
-            <Select value={classId} onValueChange={setClassId}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="학급을 선택하세요" />
-              </SelectTrigger>
-              <SelectContent>
-                {classes.filter((c) => !c.archived).map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.grade}학년 {c.classNumber}반{" "}
-                    {c.homeroom ? "(담임)" : `(${c.subject})`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>학급 / 동아리</Label>
+            <div className="flex gap-2">
+              <Select value={classId} onValueChange={setClassId}>
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="학급 또는 동아리를 선택하세요" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>학급</SelectLabel>
+                    {classes.filter((c) => !c.archived).map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.grade}학년 {c.classNumber}반{" "}
+                        {c.homeroom ? "(담임)" : `(${c.subject})`}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  {clubs.filter((c) => !c.archived).length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>동아리</SelectLabel>
+                      {clubs.filter((c) => !c.archived).map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name} ({c.members.length}명)
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" onClick={() => setClubDialogOpen(true)}>
+                동아리 관리
+              </Button>
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>날짜</Label>
@@ -285,10 +339,12 @@ export default function AttendancePage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              {selectedClass
+              {selectedClub
+                ? selectedClub.name
+                : selectedClass
                 ? `${selectedClass.grade}학년 ${selectedClass.classNumber}반`
                 : ""}{" "}
-              학생 출결
+              {selectedClub ? "부원 출결" : "학생 출결"}
             </CardTitle>
             <CardDescription>
               상태를 변경하고 우측 하단의 저장 버튼을 누르세요. 이미 저장된 기록은 자동으로 불러옵니다.
@@ -297,7 +353,9 @@ export default function AttendancePage() {
           <CardContent>
             {students.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                이 학급에 등록된 학생이 없습니다. 설정에서 학생을 먼저 추가해주세요.
+                {selectedClub
+                  ? "이 동아리에 등록된 부원이 없습니다. '동아리 관리'에서 부원을 먼저 추가해주세요."
+                  : "이 학급에 등록된 학생이 없습니다. 설정에서 학생을 먼저 추가해주세요."}
               </p>
             ) : (
               <>
@@ -410,7 +468,14 @@ export default function AttendancePage() {
                             />
                           </TableCell>
                           <TableCell>{s.number}</TableCell>
-                          <TableCell className="font-medium">{s.name}</TableCell>
+                          <TableCell className="font-medium">
+                            {s.name}
+                            {s.origin && (
+                              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                                {s.origin}
+                              </span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <Select
                               value={cur}
@@ -454,6 +519,15 @@ export default function AttendancePage() {
           </CardContent>
         </Card>
       )}
+
+      <ClubManagerDialog
+        open={clubDialogOpen}
+        onOpenChange={setClubDialogOpen}
+        onSaved={(id) => setClassId(id)}
+        onDeleted={(id) => {
+          if (classId === id) setClassId("");
+        }}
+      />
 
       {/* 저장 버튼 (sticky) */}
       {classId && students.length > 0 && (
