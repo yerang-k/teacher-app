@@ -275,6 +275,7 @@ export interface AppSettings {
   scheduleSheets?: ScheduleSheetLink[]; // 학교 일정 탭에 등록된 구글시트 목록
   periodStartTimes?: string[]; // 1~7교시 시작 시각("HH:MM"), 배열 index 0 = 1교시. 없으면 기본값 사용
   periodMinutes?: number;      // 1교시 수업 시간(분). 없으면 50
+  googleCalendarIds?: string[]; // 업무·행사·일정 달력에 읽어와 보여줄 구글 캘린더 id 목록 (읽기 전용)
   updatedAt: number;
 }
 
@@ -285,6 +286,25 @@ export interface MemoAttachment {
   mime: string;       // 예: 'application/pdf', 'image/png'
   dataUrl: string;    // data:...;base64,...
   addedAt: number;
+}
+
+/** 구글 캘린더에서 읽어온 일정 (읽기 전용, 앱 DB에는 저장하지 않음) */
+export interface GoogleCalendarEvent {
+  id: string;
+  calendarId: string;
+  calendarName: string;
+  title: string;
+  location?: string;
+  allDay: boolean;
+  startDate: string;   // YYYY-MM-DD
+  endDate: string;     // YYYY-MM-DD (포함)
+  time?: string;       // 시간 있는 일정의 시작 시각 "HH:mm"
+}
+
+export interface GoogleCalendarInfo {
+  id: string;
+  name: string;
+  color?: string;
 }
 
 /** 동아리 부원. 여러 학급 학생이 섞일 수 있어 등록된 Student와 별개로 자기 id를 가진다

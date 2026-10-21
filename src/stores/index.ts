@@ -12,3 +12,4 @@ export { useCurriculumStore } from './curriculumStore';
 export { useMemoStore } from './memoStore';
 export { useEventStore } from './eventStore';
 export { useClubStore } from './clubStore';
+export { useGoogleCalendarStore } from './googleCalendarStore';

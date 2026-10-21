@@ -1,7 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toDateKey, todayKey, compareEventsByTime } from "@/lib/dateUtils";
-import type { SchoolTask, TaskPriority, SchoolEvent, EventScope } from "@/types";
+import type {
+  SchoolTask,
+  TaskPriority,
+  SchoolEvent,
+  EventScope,
+  GoogleCalendarEvent,
+} from "@/types";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -23,23 +29,38 @@ export const SCOPE_LABEL: Record<EventScope, string> = {
   personal: "개인",
 };
 
+/** 구글 캘린더에서 읽어온 일정(읽기 전용)의 고정 색 */
+export const GOOGLE_BAR = "bg-teal-600 text-white";
+
 const MAX_SHOWN = 4;
-const MAX_EVENTS_SHOWN = 3;
+const MAX_EVENTS_SHOWN = 4;
+
+/** 앱 일정과 구글 일정을 한 칸 안에서 시간순으로 섞어 보여주기 위한 공통 모양 */
+type DayEventItem =
+  | { src: "app"; ev: SchoolEvent; allDay: boolean; time?: string }
+  | { src: "google"; ev: GoogleCalendarEvent; allDay: boolean; time?: string };
 
 interface TaskCalendarProps {
   tasks: SchoolTask[];
   events?: SchoolEvent[];
+  googleEvents?: GoogleCalendarEvent[];
   onTaskClick: (t: SchoolTask) => void;
   onEventClick?: (e: SchoolEvent) => void;
+  onGoogleEventClick?: (e: GoogleCalendarEvent) => void;
   onDayClick?: (dateKey: string) => void;
+  /** 화면에 보이는 날짜 범위(첫 칸~마지막 칸)가 바뀔 때 호출 */
+  onRangeChange?: (from: string, to: string) => void;
 }
 
 export default function TaskCalendar({
   tasks,
   events = [],
+  googleEvents = [],
   onTaskClick,
   onEventClick,
+  onGoogleEventClick,
   onDayClick,
+  onRangeChange,
 }: TaskCalendarProps) {
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
@@ -77,17 +98,30 @@ export default function TaskCalendar({
   }, [cursor]);
 
   const eventsByDate = useMemo(() => {
-    const map = new Map<string, SchoolEvent[]>();
+    const map = new Map<string, DayEventItem[]>();
     for (const d of cells) {
       const key = toDateKey(d);
       // 그날 안에서는 시간 순(빠른 일정이 위), 시간 없는 일정은 맨 아래
-      const hits = events
-        .filter((e) => e.startDate <= key && key <= e.endDate)
-        .sort(compareEventsByTime);
+      const hits: DayEventItem[] = [
+        ...events
+          .filter((e) => e.startDate <= key && key <= e.endDate)
+          .map((ev): DayEventItem => ({ src: "app", ev, allDay: ev.allDay, time: ev.time })),
+        ...googleEvents
+          .filter((e) => e.startDate <= key && key <= e.endDate)
+          .map((ev): DayEventItem => ({ src: "google", ev, allDay: ev.allDay, time: ev.time })),
+      ].sort(compareEventsByTime);
       if (hits.length) map.set(key, hits);
     }
     return map;
-  }, [cells, events]);
+  }, [cells, events, googleEvents]);
+
+  const rangeFrom = toDateKey(cells[0]);
+  const rangeTo = toDateKey(cells[cells.length - 1]);
+  const rangeCallback = useRef(onRangeChange);
+  rangeCallback.current = onRangeChange;
+  useEffect(() => {
+    rangeCallback.current?.(rangeFrom, rangeTo);
+  }, [rangeFrom, rangeTo]);
 
   const monthLabel = `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`;
   const today = todayKey();
@@ -164,22 +198,37 @@ export default function TaskCalendar({
                   {d.getDate()}
                 </span>
                 <div className="flex-1 space-y-0.5 overflow-hidden">
-                  {shownEvents.map((ev) => (
-                    <button
-                      key={ev.id}
-                      type="button"
-                      title={ev.title}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEventClick?.(ev);
-                      }}
-                      className={`w-full truncate rounded px-1 py-0.5 text-left text-[10px] font-medium leading-tight hover:opacity-80 ${SCOPE_BAR[ev.scope]}`}
-                    >
-                      {ev.title}
-                    </button>
-                  ))}
+                  {shownEvents.map((item) =>
+                    item.src === "app" ? (
+                      <button
+                        key={item.ev.id}
+                        type="button"
+                        title={item.ev.title}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEventClick?.(item.ev);
+                        }}
+                        className={`w-full truncate rounded px-1 py-0.5 text-left text-[10px] font-medium leading-tight hover:opacity-80 ${SCOPE_BAR[item.ev.scope]}`}
+                      >
+                        {item.ev.title}
+                      </button>
+                    ) : (
+                      <button
+                        key={`g-${item.ev.calendarId}-${item.ev.id}`}
+                        type="button"
+                        title={`${item.ev.title} · 구글 캘린더(${item.ev.calendarName})`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onGoogleEventClick?.(item.ev);
+                        }}
+                        className={`w-full truncate rounded px-1 py-0.5 text-left text-[10px] font-medium leading-tight hover:opacity-80 ${GOOGLE_BAR}`}
+                      >
+                        {item.ev.title}
+                      </button>
+                    )
+                  )}
                   {extraEvents > 0 && (
-                    <div className="px-1 text-[10px] text-muted-foreground">행사 +{extraEvents}개</div>
+                    <div className="px-1 text-[10px] text-muted-foreground">일정 +{extraEvents}개</div>
                   )}
                   {shown.map((t) => (
                     <button

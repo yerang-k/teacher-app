@@ -26,11 +26,18 @@ import {
 import { toast } from "sonner";
 import { ClipboardList, CalendarDays, CircleUserRound } from "lucide-react";
 
-import { useTaskStore, useEventStore } from "@/stores";
+import {
+  useTaskStore,
+  useEventStore,
+  useSettingsStore,
+  useGoogleCalendarStore,
+} from "@/stores";
 import { todayKey, daysBetween, compareEventsByStartThenTime } from "@/lib/dateUtils";
 import { linkifyText } from "@/lib/linkify";
 import TaskCalendar, { SCOPE_BAR, SCOPE_LABEL } from "@/components/TaskCalendar";
+import GoogleCalendarDialog from "@/components/GoogleCalendarDialog";
 import type {
+  GoogleCalendarEvent,
   SchoolTask,
   TaskCategory,
   TaskPriority,
@@ -207,6 +214,26 @@ export default function TasksPage() {
     setViewMode(mode);
     setShowFilters(mode === "list");
   };
+
+  // 구글 캘린더(읽기 전용): 선택한 캘린더의 일정을 달력에 보이는 범위만큼 읽어와 함께 표시
+  const settings = useSettingsStore((s) => s.settings);
+  const googleIds = settings.googleCalendarIds ?? [];
+  const googleKey = googleIds.join(",");
+  const googleEvents = useGoogleCalendarStore((s) => s.events);
+  const googleError = useGoogleCalendarStore((s) => s.error);
+  const googleLoading = useGoogleCalendarStore((s) => s.loading);
+  const loadGoogleRange = useGoogleCalendarStore((s) => s.loadRange);
+  const [calRange, setCalRange] = useState<{ from: string; to: string } | null>(null);
+  const [googleDialogOpen, setGoogleDialogOpen] = useState(false);
+  const [viewingGoogle, setViewingGoogle] = useState<GoogleCalendarEvent | null>(null);
+
+  useEffect(() => {
+    if (viewMode === "calendar" && calRange) {
+      loadGoogleRange(calRange.from, calRange.to, googleIds);
+    }
+    // googleIds는 매 렌더 새 배열이라 내용 기준(googleKey)으로만 다시 불러온다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, calRange, googleKey, loadGoogleRange]);
 
   useEffect(() => {
     loadAll();
@@ -535,6 +562,16 @@ export default function TasksPage() {
               달력
             </Button>
           </div>
+          {viewMode === "calendar" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs"
+              onClick={() => setGoogleDialogOpen(true)}
+            >
+              구글 캘린더{googleIds.length > 0 ? ` (${googleIds.length})` : ""}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -662,13 +699,35 @@ export default function TasksPage() {
       )
       )}
 
+      {viewMode === "calendar" && googleIds.length > 0 && googleError && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          <span>구글 캘린더를 불러오지 못했습니다: {googleError}</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            disabled={googleLoading}
+            onClick={() =>
+              calRange && loadGoogleRange(calRange.from, calRange.to, googleIds, true)
+            }
+          >
+            다시 시도
+          </Button>
+        </div>
+      )}
+
       {viewMode === "calendar" ? (
         <TaskCalendar
           tasks={view}
           events={calendarEvents}
+          googleEvents={googleIds.length > 0 ? googleEvents : []}
           onTaskClick={openEditTask}
           onEventClick={openEditEventItem}
+          onGoogleEventClick={setViewingGoogle}
           onDayClick={handleDayClick}
+          onRangeChange={(from, to) =>
+            setCalRange((prev) => (prev && prev.from === from && prev.to === to ? prev : { from, to }))
+          }
         />
       ) : itemType === "task" ? (
         view.length === 0 ? (
@@ -767,6 +826,41 @@ export default function TasksPage() {
           })}
         </div>
       )}
+
+      <GoogleCalendarDialog open={googleDialogOpen} onOpenChange={setGoogleDialogOpen} />
+
+      {/* 구글 캘린더 일정 보기(읽기 전용) */}
+      <Dialog open={!!viewingGoogle} onOpenChange={(o) => !o && setViewingGoogle(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{viewingGoogle?.title}</DialogTitle>
+            <DialogDescription>구글 캘린더 · {viewingGoogle?.calendarName}</DialogDescription>
+          </DialogHeader>
+          {viewingGoogle && (
+            <div className="space-y-1.5 text-sm">
+              <div>
+                <span className="text-muted-foreground">날짜 </span>
+                {viewingGoogle.startDate === viewingGoogle.endDate
+                  ? viewingGoogle.startDate
+                  : `${viewingGoogle.startDate} ~ ${viewingGoogle.endDate}`}
+              </div>
+              <div>
+                <span className="text-muted-foreground">시간 </span>
+                {viewingGoogle.allDay ? "종일" : viewingGoogle.time ?? "-"}
+              </div>
+              {viewingGoogle.location && (
+                <div>
+                  <span className="text-muted-foreground">장소 </span>
+                  {viewingGoogle.location}
+                </div>
+              )}
+              <p className="pt-2 text-xs text-muted-foreground">
+                구글 캘린더에서 읽어온 일정이라 여기서는 수정할 수 없습니다.
+              </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* 추가/편집 다이얼로그: 업무·행사·개인 공통, 상단 '구분'으로 서로 전환 가능 */}
       <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
