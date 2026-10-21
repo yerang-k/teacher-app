@@ -23,6 +23,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -38,6 +39,12 @@ import {
 } from "@/stores";
 import { todayKey, toDateKey, weekdaysOfThisWeek } from "@/lib/dateUtils";
 import { db } from "@/db";
+import {
+  PERIOD_COUNT,
+  DEFAULT_PERIOD_MINUTES,
+  DEFAULT_PERIOD_START_TIMES,
+  getPeriodTimes,
+} from "@/lib/periodTimes";
 import type {
   Semester,
   AttendanceStatus,
@@ -126,6 +133,7 @@ export default function TimetablePage() {
 
   const selectedSlot = selected ? slotAt(selected.day, selected.period) : null;
   const selectedDate = selected ? dateOfWeek(weekMonday, selected.day) : null;
+  const periodTimes = getPeriodTimes(settings);
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">
@@ -167,6 +175,7 @@ export default function TimetablePage() {
           >
             {editMode ? "✓ 편집 종료" : "✎ 시간표 편집"}
           </Button>
+          <PeriodTimesDialog />
           <Dialog>
             <DialogTrigger asChild>
               <Button variant="outline" size="icon" title="시간표 사용법">
@@ -255,6 +264,7 @@ export default function TimetablePage() {
                   period={period}
                   classes={classes}
                   slots={slots}
+                  periodStart={periodTimes.starts[period - 1]}
                   weekMonday={weekMonday}
                   weekLessons={weekLessons}
                   selected={selected}
@@ -300,10 +310,96 @@ export default function TimetablePage() {
   );
 }
 
+/** 교시별 시작 시각과 수업 시간(분)을 입력해 설정에 저장한다. 종료 시각은 시작+수업 시간으로 계산. */
+function PeriodTimesDialog() {
+  const settings = useSettingsStore((s) => s.settings);
+  const updateSettings = useSettingsStore((s) => s.update);
+  const [open, setOpen] = useState(false);
+  const [starts, setStarts] = useState<string[]>([]);
+  const [minutes, setMinutes] = useState(DEFAULT_PERIOD_MINUTES);
+
+  const handleOpenChange = (next: boolean) => {
+    if (next) {
+      const cur = getPeriodTimes(settings);
+      setStarts(cur.starts);
+      setMinutes(cur.minutes);
+    }
+    setOpen(next);
+  };
+
+  const save = async () => {
+    if (starts.length !== PERIOD_COUNT || starts.some((t) => !/^\d{2}:\d{2}$/.test(t))) {
+      toast.error("모든 교시의 시작 시각을 입력해주세요.");
+      return;
+    }
+    if (!Number.isFinite(minutes) || minutes < 10 || minutes > 120) {
+      toast.error("수업 시간은 10~120분 사이로 입력해주세요.");
+      return;
+    }
+    await updateSettings({ periodStartTimes: starts, periodMinutes: minutes });
+    toast.success("교시 시간을 저장했습니다.");
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline">🕒 교시 시간</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>교시 시간</DialogTitle>
+          <DialogDescription>
+            교시별 시작 시각과 수업 시간을 입력하세요. 시간표와 위젯에서 지금 교시를 표시하는 데 쓰입니다.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          {Array.from({ length: PERIOD_COUNT }, (_, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Label className="w-14 text-sm">{i + 1}교시</Label>
+              <Input
+                type="time"
+                className="w-32"
+                value={starts[i] ?? DEFAULT_PERIOD_START_TIMES[i]}
+                onChange={(e) =>
+                  setStarts((prev) => {
+                    const next = [...prev];
+                    next[i] = e.target.value;
+                    return next;
+                  })
+                }
+              />
+            </div>
+          ))}
+          <div className="flex items-center gap-3 pt-2">
+            <Label className="w-14 text-sm">수업 시간</Label>
+            <Input
+              type="number"
+              min={10}
+              max={120}
+              className="w-24"
+              value={minutes}
+              onChange={(e) => setMinutes(Number(e.target.value))}
+            />
+            <span className="text-sm text-muted-foreground">분</span>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            취소
+          </Button>
+          <Button onClick={save}>저장</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function Row({
   period,
   classes,
   slots,
+  periodStart,
   weekMonday,
   weekLessons,
   selected,
@@ -317,6 +413,7 @@ function Row({
   period: number;
   classes: ReturnType<typeof useClassStore.getState>["classes"];
   slots: TimetableSlot[];
+  periodStart?: string;
   weekMonday: string;
   weekLessons: Lesson[];
   selected: { day: 1 | 2 | 3 | 4 | 5; period: number } | null;
@@ -331,6 +428,7 @@ function Row({
     <>
       <div className="text-xs text-center text-muted-foreground py-2 bg-muted/40 rounded font-medium">
         {period}교시
+        {periodStart && <div className="text-[10px] font-normal opacity-70">{periodStart}</div>}
       </div>
       {DAYS.map((d) => {
         const slot = slots.find(

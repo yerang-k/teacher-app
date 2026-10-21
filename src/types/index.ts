@@ -273,6 +273,8 @@ export interface AppSettings {
   /** @deprecated scheduleSheets로 대체. 예전 단일 링크 — 있으면 최초 1회 마이그레이션용으로만 읽음. */
   scheduleSheetUrl?: string;
   scheduleSheets?: ScheduleSheetLink[]; // 학교 일정 탭에 등록된 구글시트 목록
+  periodStartTimes?: string[]; // 1~7교시 시작 시각("HH:MM"), 배열 index 0 = 1교시. 없으면 기본값 사용
+  periodMinutes?: number;      // 1교시 수업 시간(분). 없으면 50
   updatedAt: number;
 }
 
