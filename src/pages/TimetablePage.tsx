@@ -39,6 +39,7 @@ import {
 } from "@/stores";
 import { todayKey, toDateKey, weekdaysOfThisWeek } from "@/lib/dateUtils";
 import { db } from "@/db";
+import { resolveCell } from "@/lib/timetableResolve";
 import {
   PERIOD_COUNT,
   DEFAULT_PERIOD_MINUTES,
@@ -444,10 +445,11 @@ function Row({
         const overrideLesson = weekLessons.find(
           (l) => l.date === cellDate && l.period === period
         );
-        const isCancelled = overrideLesson?.status === "취소";
+        const resolution = resolveCell(klass?.id, overrideLesson);
+        const isCancelled = resolution.kind === "cancelled";
         const subKlass =
-          overrideLesson && !isCancelled && overrideLesson.classId !== klass?.id
-            ? classes.find((c) => c.id === overrideLesson.classId)
+          resolution.kind === "substitute"
+            ? classes.find((c) => c.id === resolution.classId)
             : null;
 
         if (editMode) {
@@ -615,11 +617,9 @@ function SidePanel({
   }, [date, loadLessonsByDateRange]);
 
   const overrideLesson = lessons.find((l) => l.date === date && l.period === period);
-  const isCancelled = overrideLesson?.status === "취소";
-  const savedSubstituteId =
-    overrideLesson && !isCancelled && overrideLesson.classId !== regularKlass?.id
-      ? overrideLesson.classId
-      : null;
+  const resolution = resolveCell(regularKlass?.id, overrideLesson);
+  const isCancelled = resolution.kind === "cancelled";
+  const savedSubstituteId = resolution.kind === "substitute" ? resolution.classId : null;
 
   const [tempClassId, setTempClassId] = useState("");
   const [substituting, setSubstituting] = useState(!regularKlass);

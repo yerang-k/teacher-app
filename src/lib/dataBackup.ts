@@ -24,6 +24,8 @@ export interface BackupFile {
   version: number;
   exportedAt: string;
   data: Record<string, unknown[]>;
+  /** 클라우드 동기화 때만 붙는 위젯용 요약(파일 백업에는 포함되지 않음). 복원 때는 무시된다. */
+  dashboardSummary?: unknown;
 }
 
 /** 현재 DB 전체를 백업 객체로 만듭니다. */

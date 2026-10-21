@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { db, setChangeListener, runWithoutChangeEvents } from "@/db";
 import { buildBackup, importBackupObject, type BackupFile } from "./dataBackup";
+import { buildDashboardSummary } from "./dashboardSummary";
 
 /**
  * 구글 드라이브 동기화.
@@ -98,6 +99,12 @@ export async function pushNow(): Promise<string> {
   const url = getSyncUrl();
   if (!url) throw new Error("동기화 주소가 설정되지 않았습니다.");
   const backup = stripLocalOnlyFields(await buildBackup());
+  // 안드로이드 위젯용 14일 요약을 함께 올린다. 요약 생성이 실패해도 동기화 자체는 계속한다.
+  try {
+    backup.dashboardSummary = await buildDashboardSummary();
+  } catch (e) {
+    console.error("대시보드 요약 생성 실패:", e);
+  }
   const res = await fetch(url, {
     method: "POST",
     body: JSON.stringify(backup),
