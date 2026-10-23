@@ -82,6 +82,17 @@ export default function MemosPage() {
   const quickRef = useRef<HTMLInputElement>(null);
   const backupFileRef = useRef<HTMLInputElement>(null);
 
+  const openRef = useRef(open);
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
+  const isAndroid = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+  const openSamsungNotes = () => {
+    window.location.href =
+      "intent://#Intent;package=com.samsung.android.app.notes;action=android.intent.action.VIEW;category=android.intent.category.DEFAULT;end;";
+  };
+
   const resetForm = (preset?: Partial<{ category: MemoCategory; title: string; body: string; attachments: MemoAttachment[] }>) => {
     setEditingId(null);
     setCategory(preset?.category ?? "회의록");
@@ -106,7 +117,7 @@ export default function MemosPage() {
     setOpen(true);
   };
 
-  const filesToAttachments = async (files: FileList | null) => {
+  const filesToAttachments = async (files: FileList | File[] | null) => {
     const next: MemoAttachment[] = [];
     if (!files) return next;
     for (const f of Array.from(files)) {
@@ -125,11 +136,135 @@ export default function MemosPage() {
     return next;
   };
 
-  const addFiles = async (files: FileList | null) => {
+  const addFiles = async (files: FileList | File[] | null) => {
     const next = await filesToAttachments(files);
     if (next.length) setAttachments((prev) => [...prev, ...next]);
     if (fileRef.current) fileRef.current.value = "";
   };
+
+  // 클립보드에서 이미지/텍스트를 읽어와 바로 메모로 생성하거나 열려있는 창에 첨부
+  const pasteFromClipboard = async () => {
+    try {
+      if (!navigator.clipboard?.read) {
+        toast.info("화면을 길게 누르거나 키보드에서 Ctrl+V를 눌러 붙여넣어 주세요.");
+        return;
+      }
+      const items = await navigator.clipboard.read();
+      const imageFiles: File[] = [];
+      let textContent = "";
+
+      for (const item of items) {
+        for (const type of item.types) {
+          if (type.startsWith("image/")) {
+            const blob = await item.getType(type);
+            const timeStr = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }).replace(/[^0-9]/g, "");
+            imageFiles.push(new File([blob], `필기_${todayKey()}_${timeStr}.png`, { type }));
+            break;
+          } else if (type === "text/plain" && !textContent) {
+            const blob = await item.getType(type);
+            textContent = await blob.text();
+          }
+        }
+      }
+
+      if (imageFiles.length > 0) {
+        const newAtts = await filesToAttachments(imageFiles);
+        if (!newAtts.length) return;
+        if (openRef.current) {
+          setAttachments((prev) => [...prev, ...newAtts]);
+          toast.success(`필기 이미지 ${newAtts.length}건이 첨부되었습니다.`);
+        } else {
+          resetForm({
+            title: `${todayKey()} 필기 메모`,
+            category: "메모",
+            attachments: newAtts,
+          });
+          setOpen(true);
+          toast.success("클립보드의 필기 이미지를 새 메모에 담았습니다. 확인 후 저장하세요.");
+        }
+      } else if (textContent.trim()) {
+        if (openRef.current) {
+          setBody((prev) => (prev ? prev + "\n" + textContent.trim() : textContent.trim()));
+          toast.success("클립보드 텍스트가 본문에 추가되었습니다.");
+        } else {
+          resetForm({
+            title: `${todayKey()} 메모`,
+            category: "메모",
+            body: textContent.trim(),
+          });
+          setOpen(true);
+          toast.success("클립보드 텍스트를 새 메모에 담았습니다.");
+        }
+      } else {
+        toast.info("클립보드에 복사된 이미지나 텍스트가 없습니다. 삼성노트에서 캡처/복사 후 눌러주세요.");
+      }
+    } catch (err) {
+      console.error("클립보드 읽기 실패:", err);
+      toast.info("클립보드 접근 권한이 없거나 지원되지 않습니다. 화면에서 Ctrl+V를 눌러 붙여넣어 주세요.");
+    }
+  };
+
+  // 키보드(Ctrl+V) 또는 시스템 붙여넣기 이벤트 감지
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      const isInputFocused = activeTag === "input" || activeTag === "textarea";
+
+      const items = e.clipboardData?.items;
+      if (!items || items.length === 0) return;
+
+      const imageFiles: File[] = [];
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            const timeStr = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }).replace(/[^0-9]/g, "");
+            imageFiles.push(new File([file], `필기_${todayKey()}_${timeStr}.png`, { type: file.type || "image/png" }));
+          }
+        }
+      }
+
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        const newAtts = await filesToAttachments(imageFiles);
+        if (!newAtts.length) return;
+
+        if (openRef.current) {
+          setAttachments((prev) => [...prev, ...newAtts]);
+          toast.success(`필기 이미지 ${newAtts.length}건이 첨부되었습니다.`);
+        } else {
+          resetForm({
+            title: `${todayKey()} 필기 메모`,
+            category: "메모",
+            attachments: newAtts,
+          });
+          setOpen(true);
+          toast.success("클립보드의 필기 이미지를 새 메모에 담았습니다. 확인 후 저장하세요.");
+        }
+        return;
+      }
+
+      // 입력란 밖에서 텍스트 붙여넣기 시 새 메모로 열기
+      if (!openRef.current && !isInputFocused) {
+        const text = e.clipboardData?.getData("text/plain");
+        if (text && text.trim()) {
+          e.preventDefault();
+          resetForm({
+            title: `${todayKey()} 메모`,
+            category: "메모",
+            body: text.trim(),
+          });
+          setOpen(true);
+          toast.success("클립보드의 텍스트를 새 메모에 담았습니다.");
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, []);
 
   // 메모 화면에서 바로 파일을 골라 새 메모로 만든다(삼성노트 공유가 안 될 때의 대체 경로).
   const quickImport = async (files: FileList | null) => {
@@ -273,9 +408,27 @@ export default function MemosPage() {
             회의 기록과 메모를 남기고, 삼성노트 등에서 필기한 PDF·이미지를 첨부하세요.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {isAndroid && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openSamsungNotes}
+              title="태블릿의 삼성노트 앱을 엽니다"
+            >
+              🖊️ 삼성노트
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={pasteFromClipboard}
+            title="클립보드의 필기 이미지 또는 텍스트로 새 메모 생성 (단축키: Ctrl+V)"
+          >
+            📋 붙여넣기로 새 메모
+          </Button>
           <Button variant="outline" size="sm" onClick={() => quickRef.current?.click()}>
-            📎 필기 가져오기
+            📎 파일 가져오기
           </Button>
           <input
             ref={quickRef}
@@ -305,10 +458,12 @@ export default function MemosPage() {
       {memos.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            아직 작성한 회의록·메모가 없습니다. <b>+ 새로 작성</b>으로 시작하세요.
-            <div className="mt-2 text-xs">
-              삼성태블릿이라면, 앱을 홈 화면에 설치한 뒤 삼성노트에서 <b>공유 → 교사 도우미</b>로
-              필기를 바로 첨부할 수 있어요.
+            아직 작성한 회의록·메모가 없습니다. <b>+ 새로 작성</b> 또는 <b>📋 붙여넣기로 새 메모</b>로 시작하세요.
+            <div className="mt-3 text-xs text-muted-foreground/80 space-y-1">
+              <p>
+                💡 <b>가장 빠른 필기 정리 팁</b>: 삼성노트에서 S펜 스마트 셀렉트로 필기 영역을 캡처([복사])한 뒤,
+                이 화면에서 바로 <b>Ctrl+V</b>를 누르거나 <b>[📋 붙여넣기로 새 메모]</b>를 누르면 1초 만에 새 메모가 등록됩니다.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -444,15 +599,27 @@ export default function MemosPage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label className="text-xs">첨부 (삼성노트 PDF·이미지 등)</Label>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => fileRef.current?.click()}
-                >
-                  파일 첨부
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={pasteFromClipboard}
+                    title="클립보드의 필기 이미지/텍스트를 바로 첨부합니다"
+                  >
+                    📋 붙여넣기
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    파일 첨부
+                  </Button>
+                </div>
                 <input
                   ref={fileRef}
                   type="file"
