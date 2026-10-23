@@ -1,4 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  Plus,
+  ClipboardPaste,
+  Paperclip,
+  Download,
+  Upload,
+  PenLine,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -401,34 +409,95 @@ export default function MemosPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
+      {/* 상단 헤더: 제목 / 설명 + 백업 / 새로 작성 */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold">회의록 · 메모</h1>
-          <p className="text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">회의록 · 메모</h1>
+            <Badge variant="secondary" className="font-normal text-xs">
+              {memos.length}개
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground break-keep mt-1">
             회의 기록과 메모를 남기고, 삼성노트 등에서 필기한 PDF·이미지를 첨부하세요.
           </p>
         </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+          <div className="flex items-center rounded-md border bg-muted/40 p-0.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground gap-1.5"
+              onClick={exportMemos}
+              title="메모 전체 백업 (JSON 파일 다운로드)"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>백업</span>
+            </Button>
+            <div className="h-3.5 w-px bg-border my-auto" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground gap-1.5"
+              onClick={() => backupFileRef.current?.click()}
+              title="백업 파일 불러오기 (JSON 파일 선택)"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              <span>불러오기</span>
+            </Button>
+          </div>
+          <input
+            ref={backupFileRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={importMemos}
+          />
+
+          <Button onClick={openNew} size="sm" className="h-8 px-3.5 gap-1.5 shadow-xs">
+            <Plus className="h-4 w-4" />
+            <span>새로 작성</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* 빠른 입력 툴바: 삼성노트 / 붙여넣기 / 파일 첨부 */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card/60 p-2.5 shadow-xs">
         <div className="flex items-center gap-2 flex-wrap">
           {isAndroid && (
             <Button
               variant="outline"
               size="sm"
+              className="h-8 px-3 text-xs gap-1.5 bg-background hover:bg-accent"
               onClick={openSamsungNotes}
               title="태블릿의 삼성노트 앱을 엽니다"
             >
-              🖊️ 삼성노트
+              <PenLine className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+              <span>삼성노트 열기</span>
             </Button>
           )}
+
           <Button
             variant="outline"
             size="sm"
+            className="h-8 px-3 text-xs gap-1.5 bg-background hover:bg-accent font-medium text-foreground"
             onClick={pasteFromClipboard}
-            title="클립보드의 필기 이미지 또는 텍스트로 새 메모 생성 (단축키: Ctrl+V)"
+            title="클립보드의 필기 이미지 또는 텍스트로 새 메모 바로 생성 (단축키: Ctrl+V)"
           >
-            📋 붙여넣기로 새 메모
+            <ClipboardPaste className="h-3.5 w-3.5 text-primary" />
+            <span>붙여넣기로 새 메모</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={() => quickRef.current?.click()}>
-            📎 파일 가져오기
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 text-xs gap-1.5 bg-background hover:bg-accent text-muted-foreground hover:text-foreground"
+            onClick={() => quickRef.current?.click()}
+            title="이미지 또는 PDF 파일을 선택하여 새 메모로 바로 등록"
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+            <span>파일 가져오기</span>
           </Button>
           <input
             ref={quickRef}
@@ -438,27 +507,18 @@ export default function MemosPage() {
             hidden
             onChange={(e) => quickImport(e.target.files)}
           />
-          <Button variant="outline" size="sm" onClick={exportMemos}>
-            ⬆ 백업
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => backupFileRef.current?.click()}>
-            ⬇ 불러오기
-          </Button>
-          <input
-            ref={backupFileRef}
-            type="file"
-            accept="application/json,.json"
-            hidden
-            onChange={importMemos}
-          />
-          <Button onClick={openNew}>+ 새로 작성</Button>
+        </div>
+
+        <div className="text-xs text-muted-foreground hidden sm:flex items-center gap-1.5 pr-1">
+          <span className="font-semibold text-primary">💡 팁</span>
+          <span>삼성노트에서 S펜 스마트 셀렉트로 복사 후 화면에서 <b>Ctrl+V</b></span>
         </div>
       </div>
 
       {memos.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            아직 작성한 회의록·메모가 없습니다. <b>+ 새로 작성</b> 또는 <b>📋 붙여넣기로 새 메모</b>로 시작하세요.
+            아직 작성한 회의록·메모가 없습니다. <b>새로 작성</b> 또는 <b>붙여넣기로 새 메모</b>로 시작하세요.
             <div className="mt-3 text-xs text-muted-foreground/80 space-y-1">
               <p>
                 💡 <b>가장 빠른 필기 정리 팁</b>: 삼성노트에서 S펜 스마트 셀렉트로 필기 영역을 캡처([복사])한 뒤,
@@ -604,19 +664,21 @@ export default function MemosPage() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="h-7 text-xs"
+                    className="h-7 text-xs gap-1"
                     onClick={pasteFromClipboard}
                     title="클립보드의 필기 이미지/텍스트를 바로 첨부합니다"
                   >
-                    📋 붙여넣기
+                    <ClipboardPaste className="h-3 w-3" />
+                    붙여넣기
                   </Button>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="h-7 text-xs"
+                    className="h-7 text-xs gap-1"
                     onClick={() => fileRef.current?.click()}
                   >
+                    <Paperclip className="h-3 w-3" />
                     파일 첨부
                   </Button>
                 </div>
