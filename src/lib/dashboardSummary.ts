@@ -2,7 +2,8 @@ import { db } from "@/db";
 import { toDateKey, compareEventsByTime } from "@/lib/dateUtils";
 import { getPeriodTimes, addMinutes, PERIOD_COUNT } from "@/lib/periodTimes";
 import { resolveCell } from "@/lib/timetableResolve";
-import type { SchoolClass } from "@/types";
+import { fetchCalendarEvents } from "@/lib/googleCalendar";
+import type { SchoolClass, GoogleCalendarEvent } from "@/types";
 
 /**
  * 안드로이드 위젯이 읽는 "앞으로 14일 요약".
@@ -33,7 +34,8 @@ export interface SummaryPeriod {
 
 export interface SummaryEvent {
   title: string;
-  scope: "school" | "personal";
+  /** google = 구글 캘린더에서 읽어온 일정(읽기 전용, 설정에서 고른 캘린더만) */
+  scope: "school" | "personal" | "google";
   category?: string;
   allDay: boolean;
   time?: string;
@@ -101,6 +103,17 @@ export async function buildDashboardSummary(base = new Date()): Promise<Dashboar
 
   const classById = new Map(classes.map((c) => [c.id, c]));
 
+  // 구글 캘린더(읽기 전용, 설정에서 고른 캘린더만). 실패해도 나머지 요약은 그대로 만든다.
+  let googleEvents: GoogleCalendarEvent[] = [];
+  const googleCalendarIds = settings?.googleCalendarIds ?? [];
+  if (googleCalendarIds.length > 0) {
+    try {
+      googleEvents = await fetchCalendarEvents(from, to, googleCalendarIds);
+    } catch (e) {
+      console.error("요약용 구글 캘린더 읽기 실패:", e);
+    }
+  }
+
   const days: SummaryDay[] = dayDates.map((d, idx) => {
     const date = keys[idx];
     const weekday = d.getDay();
@@ -143,19 +156,34 @@ export async function buildDashboardSummary(base = new Date()): Promise<Dashboar
       }
     }
 
-    const dayEvents: SummaryEvent[] = events
+    const dayGoogleEvents: SummaryEvent[] = googleEvents
       .filter((e) => e.startDate <= date && date <= e.endDate)
-      .sort(compareEventsByTime)
       .map((e) => ({
         title: e.title,
-        scope: e.scope,
-        category: e.category,
+        scope: "google" as const,
         allDay: e.allDay,
         time: !e.allDay ? e.time : undefined,
         location: e.location || undefined,
         startDate: e.startDate,
         endDate: e.endDate,
       }));
+
+    const dayEvents: SummaryEvent[] = events
+      .filter((e) => e.startDate <= date && date <= e.endDate)
+      .map(
+        (e): SummaryEvent => ({
+          title: e.title,
+          scope: e.scope,
+          category: e.category,
+          allDay: e.allDay,
+          time: !e.allDay ? e.time : undefined,
+          location: e.location || undefined,
+          startDate: e.startDate,
+          endDate: e.endDate,
+        })
+      )
+      .concat(dayGoogleEvents)
+      .sort(compareEventsByTime);
 
     const dayTasks: SummaryTask[] = tasks
       .filter((t) => t.dueDate === date)
