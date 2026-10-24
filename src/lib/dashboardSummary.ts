@@ -6,13 +6,14 @@ import { fetchCalendarEvents } from "@/lib/googleCalendar";
 import type { SchoolClass, GoogleCalendarEvent } from "@/types";
 
 /**
- * 안드로이드 위젯이 읽는 "앞으로 14일 요약".
+ * 안드로이드 위젯이 읽는 "앞으로 31일 요약".
  * 클라우드 동기화(pushNow)가 백업 JSON에 `dashboardSummary` 필드로 함께 올린다.
  *
  * 개인정보 원칙: 학생 이름·출결·행동특성·업무 원문(sourceBody/description)은 담지 않는다.
  * 학급 이름, 일정·업무 제목, 시간, 차시 주제만 담는다.
  */
-export const SUMMARY_DAYS = 14;
+// 31일: "이번 달 전체" 달력 위젯이 오늘부터 월말까지는 항상 덮도록(최악의 경우 1일이 오늘일 때 31일 필요).
+export const SUMMARY_DAYS = 31;
 const MAX_OVERDUE = 10;
 
 export interface SummaryClass {

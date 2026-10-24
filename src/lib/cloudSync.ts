@@ -99,7 +99,7 @@ export async function pushNow(): Promise<string> {
   const url = getSyncUrl();
   if (!url) throw new Error("동기화 주소가 설정되지 않았습니다.");
   const backup = stripLocalOnlyFields(await buildBackup());
-  // 안드로이드 위젯용 14일 요약을 함께 올린다. 요약 생성이 실패해도 동기화 자체는 계속한다.
+  // 안드로이드 위젯용 31일 요약을 함께 올린다. 요약 생성이 실패해도 동기화 자체는 계속한다.
   try {
     backup.dashboardSummary = await buildDashboardSummary();
   } catch (e) {
